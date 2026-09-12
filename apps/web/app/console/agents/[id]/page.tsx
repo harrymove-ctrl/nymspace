@@ -5,7 +5,7 @@ import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { agentMcpEndpoint, isPublishableEndpoint } from "@nymspace/core";
+import { agentMcpEndpoint, formatAmount, isPublishableEndpoint } from "@nymspace/core";
 import { fetchIdentity, fetchPermissions, fetchWallet } from "@/lib/api";
 import { EMPTY_STATES } from "@/lib/console/errors";
 import {
@@ -14,6 +14,7 @@ import {
   type VerificationState,
 } from "@/lib/console/state";
 import { AuthorityMatrix } from "@/components/console/authority-matrix";
+import { ConnectFromClaude } from "@/components/console/connect-from-claude";
 import { McpConnect } from "@/components/console/mcp-connect";
 import { PermissionProof } from "@/components/console/permission-proof";
 import { TaskRequest } from "@/components/console/task-request";
@@ -143,7 +144,14 @@ export default async function AgentPage({
           ever answer "no_endpoint" would be an action with nothing behind it.
         */}
         {identity.records.mcp ? (
-          <McpConnect target={{ kind: "fleet", agentId: id }} />
+          <>
+            <McpConnect target={{ kind: "fleet", agentId: id }} />
+            <ConnectFromClaude
+              ensName={identity.ensName}
+              label={identity.label}
+              endpoint={identity.records.mcp}
+            />
+          </>
         ) : null}
         <Field
           label={identity.recordKeys.a2a}
@@ -337,9 +345,17 @@ export default async function AgentPage({
             />
             {wallet.policy ? (
               <>
+                {/*
+                  The formatted limit, not the rule sentence. Privy names the
+                  rule "Restrict native transfers to 1000000000000000 wei",
+                  which is the confidently-wrong figure the token helpers exist
+                  to prevent — eighteen decimals is not a detail the reader
+                  should be made to carry, and the treasury screen prints the
+                  same policy as 0.001 ETH two clicks away.
+                */}
                 <Field
                   label="Policy"
-                  value={`${wallet.policy.label} — ${wallet.policy.ruleName}`}
+                  value={`${wallet.policy.label} — at most ${formatAmount(wallet.policy.maxAmount, wallet.policy.token)} per transaction`}
                   source="privy"
                   readAt={wallet.readAt}
                   mono={false}
