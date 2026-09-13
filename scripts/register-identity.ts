@@ -25,6 +25,7 @@
 import { formatEther } from "viem";
 import { requireServerEnv } from "@nymspace/core/env";
 import {
+  fleetAgent,
   publishableAgentMcpEndpoint,
   type Address,
   type Hex,
@@ -46,8 +47,37 @@ import { Agent0Client } from "@nymspace/graph";
 import { Store, closeDatabase, database, migrate } from "@nymspace/store";
 
 const ORGANIZATION_ID = "nymspace";
-const AGENT_SLUG = "research";
+
+/**
+ * Which agent gets registered. Overridable, because which one is a choice.
+ *
+ * `research` by default, since it is the one `docs/02`'s golden path walks and
+ * the one every gate asserts on. It was the only one for as long as it was the
+ * only agent with a registration — and then a second agent needed one, and the
+ * hardcoded slug meant editing this file to get it. The same shape
+ * `bind-wallet.ts` already uses for the same reason.
+ */
+const AGENT_SLUG = process.env["REGISTER_AGENT_SLUG"] ?? "research";
 const AGENT_DB_ID = `agent-${AGENT_SLUG}`;
+
+/**
+ * Adopt an existing registration instead of creating one.
+ *
+ * The reuse check below reads `store.getAgent().erc8004AgentId`, so against a
+ * store that does not know the id — a database restored from elsewhere,
+ * recreated for local work, or simply a different deployment than the one the
+ * registration was made from — this script does not adopt. It registers again,
+ * and the organization ends up paying for a second agent id claiming the same
+ * ENS name, with the store pointing at the newer one and the subgraph holding
+ * both. Exactly the failure `bind-wallet.ts` exists to undo for wallets.
+ *
+ * It cannot be discovered: the registry is keyed by agent id, so there is no
+ * name-to-id lookup on chain, and resolving it through the subgraph's text
+ * search would make an identity binding depend on a fuzzy match. So it is
+ * supplied, and then *verified* — the id is only written to the store once the
+ * registration on chain is read back and found to claim this exact name.
+ */
+const ADOPT_AGENT_ID = process.env["REGISTER_AGENT_ID"];
 
 /** Base Sepolia. The registry address is identical to Sepolia's. */
 const REGISTRATION_CHAIN_ID = 84532;
@@ -154,10 +184,28 @@ async function main(): Promise<void> {
   // 3.8 — register on Base Sepolia
   ////////////////////////////////////////////////////////////////////////////
 
+  /*
+    Name and description from `FLEET`, not from a literal here.
+
+    They were "Nymspace Research" and a sentence about ranking agents, which is
+    true of exactly one agent and was about to be written into a second one's
+    registration on a public registry. `FLEET` is where the console, the MCP
+    servers and `provision-fleet.ts` already read an agent's identity from, so
+    an agent describes itself the same way everywhere or the difference is a
+    bug somebody has to notice.
+  */
+  const identity = fleetAgent(AGENT_SLUG);
+  if (!identity) {
+    throw new Error(
+      `${AGENT_SLUG} is not in FLEET. Add it to packages/core/src/fleet.ts first — ` +
+        "a registration published from a name this process invented would claim " +
+        "something no other screen agrees with.",
+    );
+  }
+
   const file = buildRegistrationFile({
-    name: "Nymspace Research",
-    description:
-      "Finds and ranks agents from live ERC 8004 registry data. Operated by nymspace.eth.",
+    name: `Nymspace ${identity.name}`,
+    description: `${identity.description} Operated by ${deployed.parentLabel}.eth.`,
     ensName,
     mcpEndpoint,
     // Only what is actually true. `supportedTrusts` naming a scheme nobody
@@ -168,7 +216,44 @@ async function main(): Promise<void> {
 
   let agentId = existing.erc8004AgentId;
 
-  if (agentId) {
+  /*
+    An id supplied by hand is checked against the chain before it is believed.
+
+    The registration file is the authority on which name a registration claims,
+    so adopting is "read it and see". A mismatch throws rather than warning:
+    writing the wrong id into the store would point this agent's ENSIP 25 key
+    at somebody else's registration, and the verification in 3.13 would then
+    fail for a reason that looks nothing like its cause.
+  */
+  if (!agentId && ADOPT_AGENT_ID) {
+    const adopted = await erc8004.registrationFile(ADOPT_AGENT_ID);
+    const adoptedClaim = adopted ? claimedEnsName(adopted) : undefined;
+
+    if (adoptedClaim?.toLowerCase() !== ensName.toLowerCase()) {
+      throw new Error(
+        `REGISTER_AGENT_ID=${ADOPT_AGENT_ID} claims ` +
+          `${adoptedClaim ?? "no ENS name"}, not ${ensName}. Refusing to bind a ` +
+          "registration that names something else.",
+      );
+    }
+
+    agentId = ADOPT_AGENT_ID;
+    await store.upsertAgent({
+      id: AGENT_DB_ID,
+      organizationId: ORGANIZATION_ID,
+      slug: AGENT_SLUG,
+      ensName,
+      controllerAddress: ensClient.controller,
+      erc8004AgentId: agentId,
+      erc8004Registry: registry,
+    });
+
+    step({
+      what: "3.8 ERC 8004 registration",
+      ok: true,
+      detail: `adopted agent ${agentId} — its registration claims ${adoptedClaim}`,
+    });
+  } else if (agentId) {
     step({
       what: "3.8 ERC 8004 registration",
       ok: true,

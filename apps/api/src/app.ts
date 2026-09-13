@@ -9,6 +9,8 @@ import { activity } from "./routes/activity";
 import { agentMcp } from "./routes/agent-mcp";
 import { agents } from "./routes/agents";
 import { mcpConnect } from "./routes/mcp";
+import { consoleMcp } from "./routes/console-mcp";
+import { GUARDED_WRITE_PREFIXES, requireWriteToken } from "./write-gate";
 import { chat } from "./routes/chat";
 import { discover } from "./routes/discover";
 import { github } from "./routes/github";
@@ -122,6 +124,24 @@ export function createApp(config: ApiConfig, deps?: Deps, sink: Sink = stdoutSin
     app.use(`${path}/*`, withDeps(deps));
   }
 
+  /*
+    The token gate, after `withDeps` and before the routes.
+
+    After, because the 401 body carries a request id from `c.var`. Before the
+    routes, because a refusal that arrives once the handler has already
+    registered a subname is not a refusal.
+
+    Mounted here rather than per-route: `agents.ts` is one chained expression by
+    Hono's own rule — an extracted handler loses its path parameter type — so
+    threading a guard through it would mean touching every handler, and the one
+    somebody forgot would be the open one. A prefix list in a single place can
+    be read in full.
+  */
+  for (const path of GUARDED_WRITE_PREFIXES) {
+    app.use(path, requireWriteToken);
+    app.use(`${path}/*`, requireWriteToken);
+  }
+
   const routes = app
     .get("/health", (c) =>
       c.json({
@@ -142,6 +162,20 @@ export function createApp(config: ApiConfig, deps?: Deps, sink: Sink = stdoutSin
       "/v1/mcp",
       mcpConnect(config.agentMcpBaseUrl ? { exemptOrigin: config.agentMcpBaseUrl } : {}),
     )
+    /*
+      The console's own MCP server, token-gated — `routes/console-mcp.ts`.
+
+      Mounted after `/v1/mcp` and not inside it, so `mcpConnect` keeps its own
+      file and its own shape. It receives `app` rather than a base URL: its
+      tools reach the product routes by fetching this same application, which
+      is what keeps "create an agent" one implementation instead of two.
+
+      Under `/v1` deliberately. `/mcp/:label` is the fleet's public read-only
+      surface and its route throws if `deps` is present; this one needs `deps`,
+      so putting it there would mean weakening the guard that makes the public
+      one safe.
+    */
+    .route("/v1/mcp", consoleMcp(app))
     .route("/mcp", agentMcp(config.agentParentName));
 
   app.notFound(notFoundHandler);

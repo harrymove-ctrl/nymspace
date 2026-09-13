@@ -12,9 +12,11 @@ import type {
   ConsoleAnswer,
   LensDetail,
   LensEdge,
+  LensMatrix,
   LensNode,
   LensPlan,
   LensTone,
+  LensUnanswered,
   PlanStep,
 } from "@nymspace/core";
 import { ORGANIZATION_ID, REGISTRATION_CHAIN_ID, type DepsEnv } from "../deps";
@@ -208,6 +210,20 @@ async function auditLens(id: string, deps: Deps): Promise<ConsoleAnswer> {
     lanes,
     nodes,
     edges,
+    /*
+      The counted grid, which is what this answer mostly is.
+
+      A trail is a sequence, so lanes are an honest shape for reading one — but
+      "what happened to this agent" is answered first by which systems acted and
+      how those acts ended, and that is a grid. Rendered instead of the diagram,
+      never beside it: the same events drawn twice is the gallery the register
+      forbids, and at fifty events the diagram is a hundred and fifty boxes
+      whose edges say only that an event has a timestamp.
+
+      Nothing is lost by choosing. `detail` below still lists every event in
+      order, so the grid summarises rather than replaces.
+    */
+    matrix: outcomeMatrix(ordered),
     caption:
       ordered.length === 0
         ? "Nothing has been recorded for this agent yet."
@@ -235,6 +251,56 @@ function unrecognised(): ConsoleAnswer {
 //////////////////////////////////////////////////////////////////////////////
 
 /**
+ * Which system acted, crossed with how it ended.
+ *
+ * Counted here rather than read from `store.summarizeActivity`, which counts
+ * every event in the organization. This answer is about one agent, and a grid
+ * counted over the whole fleet under a title naming a single name would be the
+ * most confident wrong number on the screen.
+ *
+ * Every status gets a column whether or not it occurred. A zero under `denied`
+ * is a finding — it is this product's central claim, stated as a number — and a
+ * column that disappears when empty turns "nothing was refused" into "refusals
+ * are not counted here".
+ */
+const OUTCOMES = ["success", "denied", "failed", "pending"] as const;
+
+function outcomeMatrix(
+  events: readonly { source: string; status: string }[],
+): LensMatrix {
+  const bySource = new Map<string, number[]>();
+
+  for (const event of events) {
+    const row = bySource.get(event.source) ?? OUTCOMES.map(() => 0);
+    const column = OUTCOMES.indexOf(event.status as (typeof OUTCOMES)[number]);
+    if (column >= 0) row[column] = (row[column] ?? 0) + 1;
+    bySource.set(event.source, row);
+  }
+
+  const total = (values: readonly number[]) =>
+    values.reduce((sum, n) => sum + n, 0);
+
+  const rows = [...bySource.entries()]
+    .map(([label, values]) => ({ label, values }))
+    // Busiest first, then alphabetical, so the order is stable between reads
+    // rather than following whatever the log happened to return.
+    .sort((a, b) => total(b.values) - total(a.values) || a.label.localeCompare(b.label));
+
+  return {
+    title: "OUTCOMES",
+    rowHeader: "source",
+    columns: [...OUTCOMES],
+    rows,
+    caption:
+      rows.length === 0
+        ? "No events recorded, so nothing to count."
+        : `${events.length} events by the system that recorded them.`,
+  };
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+/**
  * The five write intents, in the order the demo walks them.
  *
  * Each returns a plan naming real endpoints with real bodies; none of them
@@ -251,7 +317,7 @@ async function matchPlan(
   text: string,
   original: string,
   deps: Deps,
-): Promise<LensPlan | undefined> {
+): Promise<LensPlan | LensUnanswered | undefined> {
   // 1. Onboard.
   const created = /\b(create|onboard|add|register)\b.*\bagent\b/.test(text)
     ? /\b(?:create|onboard|add|register)\s+(?:a|an|the)?\s*([a-z0-9][a-z0-9-]{1,30})\s+agent\b/.exec(text)?.[1]
@@ -418,9 +484,49 @@ async function paymentPlan(
   amountWei: string,
   text: string,
   deps: Deps,
-): Promise<LensPlan | undefined> {
+): Promise<LensPlan | LensUnanswered | undefined> {
   const agent = await deps.store.getAgent(id);
   if (!agent) return undefined;
+
+  /**
+   * No wallet, no plan — the precondition is checked here rather than left to
+   * the routes.
+   *
+   * Both steps read the same `financial_authority` reference and both 409
+   * without it, so an unprovisioned agent got a plan promising to check a
+   * policy and send a payment, followed by two identical red failures telling
+   * an operator on a deployed console to run a `pnpm` script. The plan was
+   * never true: the summary described a wallet that does not exist, and
+   * "Send the payment" is not an offer this deployment can keep.
+   *
+   * It is also the console failing one of its own {@link CONSOLE_SUGGESTIONS},
+   * which that list's comment calls a promise. A promise the matcher cannot
+   * keep has to be withdrawn before it is made, not after — the same argument
+   * `docs/03` makes about a screen that shows an action it cannot perform.
+   *
+   * Unanswered rather than a plan, because nothing here is a denial: a denial
+   * is the policy refusing an amount, and this is an agent with no policy to
+   * refuse with. Rendering them the same way would put the absence of the
+   * control plane on the same screen as the control plane working.
+   */
+  const authority = await deps.store.getFinancialAuthority(id);
+  if (!authority?.policyId) {
+    return {
+      kind: "unanswered",
+      message: authority
+        ? `${agent.ensName} has a wallet but no spend policy, so there is no limit to check an amount against ` +
+          `and nothing that would cap it. Until a policy is attached, a payment from this agent would be ` +
+          `governed by nothing — the console will not offer one.`
+        : `${agent.ensName} has no wallet. Nothing signs for it and no Privy policy caps it, so there is no ` +
+          `payment to preview and none to send. Wallet provisioning has not run against this deployment's ` +
+          `store — Treasury shows the same thing for every agent it has not run for.`,
+      suggestions: [
+        "show me the fleet",
+        `show ${agent.slug}`,
+        `show the audit trail for ${agent.slug}`,
+      ],
+    };
+  }
 
   const recipient = /0x[0-9a-fA-F]{40}/.exec(text)?.[0] ?? agent.controllerAddress;
 
