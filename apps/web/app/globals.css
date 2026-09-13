@@ -622,3 +622,64 @@ html::-webkit-scrollbar {
     animation: none;
   }
 }
+
+/* ── Sound ────────────────────────────────────────────────────────────────
+   The mute toggle's icon, which the registry does not ship.
+
+   `@kobra/sound` installs one file — `components/ui/sound.tsx` — and its
+   `SoundToggle` draws a speaker, two waves and a slash, hangs `.sound-*` class
+   names off them, and stops there. The styles those names expect live in
+   Kobra's own stylesheet, which is not part of the registry item. Unstyled,
+   every path paints at once: the speaker renders permanently slashed, the mask
+   permanently cut, and the control says "muted" whether it is or not.
+
+   So the state lives here, keyed on `data-muted` on the <svg> — the one
+   attribute the component sets from `useSoundMuted()`.
+
+   The slash is drawn rather than shown. Both copies carry `pathLength={1}`, so
+   a dash array of 1 with an offset of 1 is exactly the whole line hidden and 0
+   is exactly the whole line drawn, independent of the path's real length. The
+   second copy is inside the mask, so the hole it punches in the speaker is cut
+   by the same stroke as it travels — the slash appears to push the waves apart
+   rather than to be laid over them. */
+.sound-slash {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-muted="true"] .sound-slash {
+  stroke-dashoffset: 0;
+}
+
+/* The waves are the audible part of the icon, so they are what leaves. They
+   retreat inward — outer first, and further — so the two read as one gesture
+   collapsing into the speaker rather than as two paths fading on a timer. */
+.sound-wave {
+  transform-origin: 25% 50%;
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-muted="true"] .sound-wave {
+  opacity: 0;
+}
+
+[data-muted="true"] .sound-wave-inner {
+  transform: translateX(-1px) scale(0.9);
+}
+
+[data-muted="true"] .sound-wave-outer {
+  transform: translateX(-2px) scale(0.8);
+}
+
+/* The icon still changes; it stops travelling. Removing the state would leave
+   a mute control that gives no sign of being engaged, which is the one thing
+   this icon exists to say. */
+@media (prefers-reduced-motion: reduce) {
+  .sound-slash,
+  .sound-wave {
+    transition: none;
+  }
+}

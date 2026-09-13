@@ -52,3 +52,6 @@ next-env.d.ts
 # but it is a run artifact rather than source.
 packages/ens/spike-evidence.json
 packages/ens/spike-verify.json
+
+# pnpm store, when the default one is not writable
+.pnpm-store/

@@ -1,0 +1,66 @@
+{
+  "ranAt": "2026-09-13T06:49:21.690Z",
+  "attempts": 3,
+  "requests": [
+    {
+      "label": "unmatched",
+      "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
+      "expect": "show_fleet"
+    },
+    {
+      "label": "one-agent",
+      "message": "how is the billing one set up, and what is it allowed to write",
+      "expect": "show_agent:agent-billing"
+    }
+  ],
+  "rows": [
+    {
+      "model": "gemini-3.5-flash-lite",
+      "correct": 4,
+      "answered": 4,
+      "attempts": 6,
+      "latencyMs": [
+        1347,
+        812,
+        814,
+        952
+      ],
+      "medianMs": 952,
+      "outcomes": [
+        "unmatched=show_fleet",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=miss:no_call",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=miss:no_call",
+        "one-agent=show_agent:agent-billing"
+      ]
+    }
+  ],
+  "retry": {
+    "model": "gemini-3.5-flash-lite",
+    "attempts": 12,
+    "placedFirst": 7,
+    "retried": 4,
+    "placedOnRetry": 2,
+    "firstMs": [
+      808,
+      675,
+      730,
+      783,
+      795,
+      1204,
+      714,
+      816,
+      634,
+      909,
+      650,
+      298
+    ],
+    "retryMs": [
+      1598,
+      1638,
+      1367,
+      1303
+    ]
+  }
+}

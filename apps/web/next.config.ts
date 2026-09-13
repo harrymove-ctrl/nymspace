@@ -58,6 +58,7 @@ const nextConfig: NextConfig = {
    * listed from the start, including the ones that are still shells.
    */
   transpilePackages: [
+    "@nymspace/adk",
     "@nymspace/core",
     "@nymspace/ens",
     "@nymspace/github",

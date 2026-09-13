@@ -264,6 +264,44 @@ rather than an empty result list: "no agents matched" and "we could not ask"
 are different answers, and a caller that cannot tell them apart renders an
 outage as a market with nothing in it.
 
+### Console chat routing — `@nymspace/adk`
+
+`packages/adk/src/router.ts`, with the tool contract in `tools.ts`.
+`ROUTING_MODEL` is `"gemini-3.5-flash-lite"`, keyed by the same
+`GEMINI_API_KEY` behind the same `server-only` guard. Pinned on the measurement
+in `packages/adk/evidence/routing-models.json`, and pinned on the *shape* of
+the failures rather than the count: the models that miss by saying nothing land
+on the unanswered state, and the one that answered every time sent half of them
+to the wrong agent.
+
+The chat answers from live reads and a deterministic matcher decides which
+read. This is the stage behind that matcher, and only that: it takes a
+question the matcher declined and returns one tool name with arguments drawn
+from sets built on that request — the agent ids `store.listAgents` just
+returned, the three record keys this product defines. `apps/api` runs the
+selection through the lens builder the matcher would have used, so a routed
+answer and a matched one are the same bytes.
+
+Responsibilities:
+
+* Place a question the matcher could not, as a tool selection
+* Draw every argument from the closed sets given for that request
+* Fail to the unanswered state — missing key, timeout, quota, malformed
+
+Must not:
+
+* Write any part of an answer. Its prose is read off the wire and dropped
+* See what a read returned. The loop stops at the first tool call; no result
+  is fed back for a second turn
+* Execute anything. The write intents return plans, which an operator confirms
+* Receive fleet text in its system instruction. Labels and record values are
+  untrusted data in the user turn, per `docs/12`
+
+Every answer carries the stage that placed it, and the console shows it when
+that stage was the model. `openspec/changes/route-the-console-chat-with-adk/`
+holds the reasoning; design D5 is why the disclosure is on the wire rather
+than in a log.
+
 ### Discovery agent — `rankAgents`
 
 `packages/graph/src/ranking.ts` and `packages/graph/src/discovery.ts`.

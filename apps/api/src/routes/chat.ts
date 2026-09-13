@@ -10,6 +10,8 @@ import {
 import { CONSOLE_SUGGESTIONS } from "@nymspace/core";
 import type {
   ConsoleAnswer,
+  ConsoleBody,
+  ConsoleRouting,
   LensDetail,
   LensEdge,
   LensMatrix,
@@ -19,24 +21,41 @@ import type {
   LensUnanswered,
   PlanStep,
 } from "@nymspace/core";
+import type { ChatToolCall, RecordKeyName } from "@nymspace/adk";
 import { ORGANIZATION_ID, REGISTRATION_CHAIN_ID, type DepsEnv } from "../deps";
+import type { Log } from "../log";
 import { readAt } from "./shared";
 
 /**
  * The console's chat, answered from live reads rather than from a model.
  *
- * There is no language model behind this and that is the design, not a
- * shortcut. The product's claim is that everything displayed is derived from
- * the system that owns it — so an answer here is assembled from the same ENS,
- * ERC 8004 and EAC reads the Inspector uses, and the intent step is a matcher
- * over a small vocabulary rather than a generator. A model asked to describe a
- * permission can be fluent and wrong; a matcher can only be one or the other,
- * and when it is wrong it says so.
+ * No language model writes an answer here, and that is the design rather than
+ * a shortcut. The product's claim is that everything displayed is derived from
+ * the system that owns it — so an answer is assembled from the same ENS, ERC
+ * 8004 and EAC reads the Inspector uses. A model asked to describe a
+ * permission can be fluent and wrong; a read can only be one or the other, and
+ * when it is wrong it says so.
  *
- * That is why {@link LensUnanswered} exists as a separate shape. A question
- * this cannot parse gets a list of questions it can, not an empty diagram —
- * an empty diagram is a claim about the fleet, and the failure here is a
- * failure to understand, which is a claim about the question.
+ * A model does choose *which* read, and only when the matcher could not.
+ *
+ * That distinction is the change `route-the-console-chat-with-adk` argues for.
+ * The matcher is a handful of regexes over a small vocabulary, and it decides
+ * every question this console was demonstrated with — including the pairs that
+ * differ by one word, which is why it still runs first and why `chat.test.ts`
+ * pins them. What it cannot do is recognise the same question asked in other
+ * words, and the cost of that is not a wrong answer but no answer, which left
+ * every intent below unreachable unless the operator typed the canned
+ * phrasing. So `@nymspace/adk` gets the sentences the matcher declined, and
+ * returns a tool name and arguments drawn from sets built on this request —
+ * never prose, never a value this file then trusts. {@link dispatch} runs the
+ * same function the matcher would have run, and the answer is identical.
+ *
+ * {@link LensUnanswered} is still where both stages fail to. A question
+ * neither can place gets a list of questions this console can answer, not an
+ * empty diagram — an empty diagram is a claim about the fleet, and the failure
+ * here is a failure to understand, which is a claim about the question.
+ *
+ * Every answer says which stage placed it. See {@link stamp}.
  *
  * Intents:
  *
@@ -61,14 +80,47 @@ export const chat = new Hono<DepsEnv>().post(
   zValidator("json", askSchema),
   async (c) => {
     const message = c.req.valid("json").message.trim();
-    const answer = await route(message, c.var.deps);
-    return c.json(answer);
+    const { deps, log } = c.var;
+
+    const matched = await match(message, deps);
+    if (matched) {
+      log.info("chat answered", { stage: "matcher", answer: matched.kind });
+      return c.json(stamp(matched, "matcher"));
+    }
+
+    const routed = await routeWithModel(message, deps, log);
+    if (routed) return c.json(stamp(routed, "model"));
+
+    /**
+     * Logged as its own outcome, not left to the absence of a line.
+     *
+     * "Neither stage placed this question" is the fact worth counting: it is
+     * the measure of what the console is being asked and cannot answer, and it
+     * is what would tell someone whether the routing stage is earning its
+     * budget. Inferring it from a missing log line means inferring it from
+     * something a refactor can silently produce.
+     */
+    log.info("chat answered", { stage: "none", answer: "unanswered" });
+    return c.json(stamp(unrecognised(), "matcher"));
   },
 );
 
 type Deps = DepsEnv["Variables"]["deps"];
 
-async function route(message: string, deps: Deps): Promise<ConsoleAnswer> {
+/**
+ * The routing stage, stamped at the one point an answer leaves.
+ *
+ * Here rather than inside each builder, because no builder knows: `agentLens`
+ * runs on both paths and has to produce the same bytes on both, which is the
+ * property that makes a model near this route acceptable at all. Stamping at
+ * the exit also means there is no default to get wrong — an answer that
+ * reached the client without passing through this line would not compile.
+ */
+function stamp(body: ConsoleBody, routedBy: ConsoleRouting): ConsoleAnswer {
+  return { ...body, routedBy };
+}
+
+async function match(message: string, deps: Deps): Promise<ConsoleBody | undefined> {
   const text = message.toLowerCase();
 
   /**
@@ -113,12 +165,162 @@ async function route(message: string, deps: Deps): Promise<ConsoleAnswer> {
   const slug = await matchAgent(text, deps);
   if (slug) return agentLens(slug, deps);
 
-  return {
-    kind: "unanswered",
-    message:
-      "I did not recognise an agent or a topic in that. I answer from live ENS, ERC 8004 and permission reads, so I can only answer about things I can go and check.",
-    suggestions: [...CONSOLE_SUGGESTIONS],
-  };
+  /**
+   * Not an answer — an admission that this stage has nothing.
+   *
+   * It used to return {@link unrecognised} directly, which was the same thing
+   * said with more confidence: the matcher failing to place a sentence is not
+   * evidence that the sentence is unplaceable. The caller decides what happens
+   * next, and what happens next is the routing stage.
+   */
+  return undefined;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// The routing stage — a model selects the read, and performs none of it
+//////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Ask the router which read this sentence wants, and perform that read.
+ *
+ * Everything that can go wrong returns `undefined`, and `undefined` becomes
+ * the unanswered state the matcher would have produced on its own. No branch
+ * here returns a 5xx: the operator asked something this console could not
+ * place, which is what that state says, and a provider's availability is not
+ * this API's. `/health` exists so that liveness is answered by something that
+ * depends on nothing, and this is the same argument from the other end.
+ *
+ * The fleet is read here rather than in the router, because this is the file
+ * that holds the store. The router gets ids, slugs and names — the same fields
+ * `matchAgent` matches on — and no permission, wallet or record state.
+ */
+async function routeWithModel(
+  message: string,
+  deps: Deps,
+  log: Log,
+): Promise<ConsoleBody | undefined> {
+  const router = deps.chatRouter;
+  if (!router) return undefined;
+
+  const agents = await deps.store.listAgents(ORGANIZATION_ID);
+  const routing = await router.route({
+    message,
+    fleet: {
+      parentName: deps.parentName,
+      agents: agents.map((agent) => ({
+        id: agent.id,
+        slug: agent.slug,
+        ensName: agent.ensName,
+      })),
+    },
+  });
+
+  if (routing.kind === "miss") {
+    log.info("chat unrouted", {
+      stage: "model",
+      miss: routing.reason,
+      /**
+       * The provider's code, never its message — `@nymspace/adk` only carries
+       * the one. An outage and a model that had nothing to say are different
+       * operational facts, and on this route they produce the same screen.
+       */
+      ...(routing.providerCode && { providerCode: routing.providerCode }),
+      modelMs: routing.elapsedMs,
+    });
+    return undefined;
+  }
+
+  const answer = await dispatch(routing.call, deps);
+
+  /**
+   * One "chat answered" per request, and it is logged by whoever actually
+   * answered.
+   *
+   * This used to log the line unconditionally, including when `dispatch`
+   * returned nothing — and the handler then logged a second one, so a single
+   * request id carried `stage=model answer=none` and `stage=none
+   * answer=unanswered`, disagreeing with itself about which stage answered.
+   * A log nobody can count is the failure `apps/api/src/log.ts` exists to
+   * avoid.
+   *
+   * A selection that dispatched to nothing is an unrouted request, not an
+   * answered one: the model placed the question and the row it named was gone
+   * by the time the read ran.
+   */
+  if (!answer) {
+    log.info("chat unrouted", {
+      stage: "model",
+      miss: "dispatch_empty",
+      tool: routing.tool,
+      modelMs: routing.elapsedMs,
+    });
+    return undefined;
+  }
+
+  log.info("chat answered", {
+    stage: "model",
+    tool: routing.tool,
+    modelMs: routing.elapsedMs,
+    answer: answer.kind,
+  });
+
+  return answer;
+}
+
+/**
+ * A selection, run.
+ *
+ * Every arm calls the function the matcher's own branch calls, with no
+ * rendering of its own — so a routed audit trail is `auditLens`, with the same
+ * lanes and the same denial rows it refuses to filter out. A second rendering
+ * path would be a second way to describe a permission, and the two would
+ * eventually disagree.
+ *
+ * The arguments have already been checked against this request's fleet by
+ * `validateToolCall`, and are checked again by the functions themselves: each
+ * reads the agent from the store and gives up when it is not there. Two checks
+ * because they are guarding different things — one that the model chose from
+ * the list it was given, one that the row still exists when the read happens.
+ */
+async function dispatch(
+  call: ChatToolCall,
+  deps: Deps,
+): Promise<ConsoleBody | undefined> {
+  switch (call.tool) {
+    case "show_fleet":
+      return fleetLens(deps);
+    case "show_agent":
+      return agentLens(call.agentId, deps);
+    case "show_audit":
+      return auditLens(call.agentId, deps);
+    case "plan_onboard":
+      return onboardPlan(call.label, deps);
+    case "plan_grant":
+      return grantPlan(call.agentId, recordKeyFor(call.recordKey), deps);
+    case "plan_record_write":
+      return recordPlan(call.agentId, recordKeyFor(call.recordKey), call.value, deps);
+    case "plan_payment": {
+      /**
+       * Through `matchEth`, not beside it.
+       *
+       * The model states an amount in whole ETH and this re-derives the base
+       * units with the function the matcher uses, on a sentence assembled
+       * here. A second conversion would be a second chance to ship a demo that
+       * displays 100 and sends 100 wei, and the two would look identical on
+       * screen until someone checked the transaction.
+       */
+      const wei = matchEth(`${call.amountEth} eth`);
+      if (!wei) return undefined;
+      return paymentPlan(call.agentId, wei, call.recipient, deps);
+    }
+    case "plan_connect":
+      return connectPlan(call.agentId, deps);
+  }
+}
+
+/** The operator's word for a record, as the resolver spells it. */
+function recordKeyFor(name: RecordKeyName): string {
+  return name === "agent-context" ? AGENT_CONTEXT_KEY : agentEndpointKey(name);
 }
 
 /** Cheap pre-check so "show me the agents" does not beat "show research". */
@@ -142,7 +344,7 @@ function nameIn(text: string, _deps: Deps): boolean {
  * the one artifact in this product capable of proving nothing was ever refused
  * — see `store.listActivity`, which refuses to filter them for the same reason.
  */
-async function auditLens(id: string, deps: Deps): Promise<ConsoleAnswer> {
+async function auditLens(id: string, deps: Deps): Promise<ConsoleBody> {
   const agent = await deps.store.getAgent(id);
   if (!agent) return unrecognised();
 
@@ -237,7 +439,7 @@ async function auditLens(id: string, deps: Deps): Promise<ConsoleAnswer> {
   };
 }
 
-function unrecognised(): ConsoleAnswer {
+function unrecognised(): ConsoleBody {
   return {
     kind: "unanswered",
     message:
@@ -335,14 +537,15 @@ async function matchPlan(
   if (/\bas\b/.test(text) && /\b(set|update|change|write)\b/.test(text)) {
     const id = await matchAgent(text, deps);
     const key = matchRecordKey(text);
-    if (id && key) return recordPlan(id, key, original, deps);
+    if (id && key) return recordPlan(id, key, matchValue(original), deps);
   }
 
   // 5. Pay.
   if (/\b(pay|send|transfer)\b/.test(text)) {
     const id = await matchAgent(text, deps);
     const amount = matchEth(text);
-    if (id && amount) return paymentPlan(id, amount, text, deps);
+    const recipient = /0x[0-9a-fA-F]{40}/.exec(text)?.[0];
+    if (id && amount) return paymentPlan(id, amount, recipient, deps);
   }
 
   return undefined;
@@ -427,14 +630,24 @@ function grantPlan(id: string, key: string, deps: Deps): LensPlan {
 async function recordPlan(
   id: string,
   key: string,
-  original: string,
+  /**
+   * The value to write, already extracted.
+   *
+   * Extracted by the caller rather than here, because the two callers extract
+   * it differently and only one of them has a sentence: the matcher quotes it
+   * out of what the operator typed, and the routing stage receives it as a
+   * tool argument. Passing the raw message down and parsing it twice would
+   * mean the routing stage had to fabricate a sentence for this function to
+   * take apart again.
+   */
+  given: string | undefined,
   deps: Deps,
 ): Promise<LensPlan | undefined> {
   const agent = await deps.store.getAgent(id);
   if (!agent) return undefined;
 
   const allowed = await deps.ens.canSetText(agent.ensName, key, agent.controllerAddress);
-  const value = matchValue(original) ?? `https://example.com/${key}`;
+  const value = given ?? `https://example.com/${key}`;
 
   return {
     kind: "plan",
@@ -482,7 +695,8 @@ function matchValue(original: string): string | undefined {
 async function paymentPlan(
   id: string,
   amountWei: string,
-  text: string,
+  /** The address the operator named, if they named one. */
+  given: string | undefined,
   deps: Deps,
 ): Promise<LensPlan | LensUnanswered | undefined> {
   const agent = await deps.store.getAgent(id);
@@ -528,7 +742,7 @@ async function paymentPlan(
     };
   }
 
-  const recipient = /0x[0-9a-fA-F]{40}/.exec(text)?.[0] ?? agent.controllerAddress;
+  const recipient = given ?? agent.controllerAddress;
 
   return {
     kind: "plan",
@@ -620,7 +834,7 @@ async function matchAgent(text: string, deps: Deps): Promise<string | undefined>
  * hides which integration is incomplete, and on this screen that would be a
  * green row for an agent with no wallet.
  */
-async function fleetLens(deps: Deps): Promise<ConsoleAnswer> {
+async function fleetLens(deps: Deps): Promise<ConsoleBody> {
   const agents = await deps.store.listAgents(ORGANIZATION_ID);
   const lanes = ["ENS", "ERC 8004", "VERIFICATION"];
 
@@ -716,7 +930,7 @@ async function fleetLens(deps: Deps): Promise<ConsoleAnswer> {
  * wrong resource derivation and a genuine denial produce the same value and
  * only a positive control in the same request separates them.
  */
-async function agentLens(agentId: string, deps: Deps): Promise<ConsoleAnswer> {
+async function agentLens(agentId: string, deps: Deps): Promise<ConsoleBody> {
   const { store, ens, erc8004, config, registry, organization } = deps;
   const agent = await store.getAgent(agentId);
   if (!agent) {

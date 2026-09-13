@@ -205,6 +205,21 @@ export function Outcome({
   return (
     <Banner
       status={OUTCOME_STATUS[tone]}
+      /*
+        The same fact the status already carries, in the one form the sound
+        layer reads. `components/ui/sound.tsx` listens for `data-success` and
+        `data-error` arriving anywhere in the document, so this is every
+        console outcome — a write that landed, a payment that failed —
+        acquiring its cue at the single place they are all rendered.
+
+        Only the two tones that are actually outcomes. `proof` is a denial the
+        control plane was supposed to produce and `waiting` has not finished;
+        `docs/03` is explicit that a denial is not an error, and a failure
+        chime is a louder way of saying it than the red this component already
+        refuses to paint.
+      */
+      data-success={tone === "allowed" ? "" : undefined}
+      data-error={tone === "fault" ? "" : undefined}
       // The only tone whose status does not identify it: `waiting` and `proof`
       // are both `info`, and a clock is what separates "still happening" from
       // "happened, and was refused".

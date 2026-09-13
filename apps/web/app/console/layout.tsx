@@ -3,6 +3,7 @@ import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SoundToggle } from "@/components/ui/sound";
 import { ConsoleNav } from "@/components/console/nav";
 import { ViewTransition } from "@/components/console/view-transition";
 import { ConnectVisitor, VisitorProvider } from "@/components/console/visitor";
@@ -95,6 +96,15 @@ export default function ConsoleLayout({ children }: LayoutProps<"/console">) {
             </HStack>
             <HStack gap={4} align="center">
               <ConnectVisitor />
+              {/*
+                Next to the theme toggle because they are the same kind of
+                switch: two viewer preferences about how the console presents
+                itself, both stored locally, neither of them state the product
+                has an opinion about. The control is also the only place the
+                interface admits it makes sound at all, so it belongs where a
+                viewer already looks for the settings that are not settings.
+              */}
+              <SoundToggle />
               <ThemeToggle />
             </HStack>
           </HStack>

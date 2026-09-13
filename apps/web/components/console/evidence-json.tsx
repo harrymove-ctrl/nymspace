@@ -71,6 +71,9 @@ export function EvidenceJson({ label, json }: { label: string; json: string }) {
       className="frame-rule-below last:bg-none evidence-pane cursor-pointer"
       role="button"
       tabIndex={0}
+      // The block is a copy target rather than a command, and `role="button"`
+      // alone would have it answer like one. See `copyable-value.tsx`.
+      data-sound="copy"
       aria-label={`Copy ${label.toLowerCase()} as JSON`}
       onClick={copy}
       onKeyDown={(event) => {

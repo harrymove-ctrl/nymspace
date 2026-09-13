@@ -12,6 +12,7 @@ import {
   type ViemChainClient,
 } from "@nymspace/ens";
 import { Agent0Client } from "@nymspace/graph";
+import { createAdkRouter, type ChatRouter } from "@nymspace/adk";
 import {
   PrivyClient,
   agentSignerKey,
@@ -108,6 +109,16 @@ export interface Deps {
   readonly privyOwner: PrivyClient | undefined;
   /** What payments are denominated in. `null` is native ETH. */
   readonly paymentToken: TokenSpec | null;
+  /**
+   * The console chat's routing stage, when a credential is configured.
+   *
+   * `undefined` is a product state rather than a missing dependency, the same
+   * way `privyOwner` is. With no key the chat behaves exactly as it did before
+   * the stage existed: the matcher answers what it recognises and everything
+   * else gets the unanswered state and its suggestions. Nothing on the screen
+   * claims a capability the deployment does not have.
+   */
+  readonly chatRouter: ChatRouter | undefined;
   chain: ViemChainClient;
   config: ChainConfig;
   organization: Address;
@@ -133,6 +144,7 @@ let migrated = false;
 let privyClient: PrivyClient | undefined;
 let privyOwnerClient: PrivyClient | undefined;
 let paymentToken: TokenSpec | null | undefined;
+let chatRouter: ChatRouter | null | undefined;
 
 export async function buildDeps(): Promise<Deps> {
   if (cached) return cached;
@@ -244,6 +256,24 @@ export async function buildDeps(): Promise<Deps> {
       privyOwnerClient ??= new PrivyClient({ authorizationKey: key });
       return privyOwnerClient;
     },
+    get chatRouter() {
+      /**
+       * Built once, on first use, and `null` records "asked and there is no
+       * key" so a keyless deployment does not re-read the environment on
+       * every unmatched message.
+       *
+       * The key is read here rather than inside the router so that a
+       * deployment's configuration is resolved where every other credential
+       * is. `@nymspace/graph` reads `GEMINI_API_KEY` the same way for the
+       * ranking step; this is the same key behind the same `server-only`
+       * guard, doing a different job.
+       */
+      if (chatRouter === undefined) {
+        const apiKey = process.env["GEMINI_API_KEY"];
+        chatRouter = apiKey ? createAdkRouter({ apiKey }) : null;
+      }
+      return chatRouter ?? undefined;
+    },
     get paymentToken() {
       // `??=` would re-resolve on every access once the answer is `null`, and
       // `null` is the ordinary answer for a native-ETH deployment.
@@ -282,4 +312,5 @@ export function resetDeps(): void {
   privyClient = undefined;
   privyOwnerClient = undefined;
   paymentToken = undefined;
+  chatRouter = undefined;
 }

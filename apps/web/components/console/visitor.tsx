@@ -207,6 +207,8 @@ export function AddressChip({ address }: { address: string }) {
       <IconButton
         size="sm"
         variant="ghost"
+        // The clipboard's own cue; see the note in `copyable-value.tsx`.
+        data-sound="copy"
         // The tooltip stays "Copy"; the icon flip is the confirmation. The
         // label moves, because that is what a screen reader reads back.
         tooltip="Copy address"

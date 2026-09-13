@@ -1,0 +1,42 @@
+## Why
+
+The console chat answers nine sentences, and they are the nine it prints on the screen.
+
+`CONSOLE_SUGGESTIONS` is described in `packages/core/src/lens.ts` as a promise — every line has to match a real intent. It is also, in practice, the complete vocabulary. `route()` in `apps/api/src/routes/chat.ts` is a sequence of regexes over a handful of verbs (`create|onboard|add|register`, `let|allow|grant|give`, `as … set`, `pay|send|transfer`, `audit|trail|history`, `fleet|agents`), and `matchAgent` requires the agent's slug or full ENS name as a literal substring. Anything else returns `LensUnanswered`.
+
+An operator typed a plain English sentence into the deployed console — *"For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?"* — and got back the unrecognised state and the same nine offers. That screen is working as designed, and the design is wrong about one thing.
+
+The header comment in `chat.ts` says there is no model behind this and that it is the design rather than a shortcut, because *"a model asked to describe a permission can be fluent and wrong; a matcher can only be one or the other."* That argument is correct and this change does not weaken it. But it is an argument about the **answer**, and it was applied to the **routing**. Deciding which of eight intents an English sentence expresses is the one part of this that a small model does well and a regex does badly, and a routing miss does not produce a wrong answer — it produces no answer, which makes every function behind the chat unreachable unless the operator already knows the canned phrasing. A text box that only accepts its own suggestions is a menu wearing a text input.
+
+The repository already has the shape this needs. `packages/graph/src/ranking.ts` runs Gemini under design rule D4 — *"the discovery LLM gets a tool, not a transcript"* — where the model orders an array a server-side filter already produced, cannot search, cannot filter, and cannot reach the network, which is what makes its output checkable field by field. This change applies the same rule one screen over: **the model chooses which read to perform, and the read is still what answers.**
+
+Google's ADK is the runner for that. It is a tool-calling agent loop with a typed tool surface, which is exactly the boundary this needs enforced, and it puts the console on the same Google agent stack the ranking step already uses.
+
+## What Changes
+
+- **The matcher stays, and stays first.** Every sentence `route()` understands today is answered exactly as it is today, with no model call, no token spend and no added latency. The behaviours pinned in `chat.test.ts` — the MCP question that must not steal the record write, the record write that must not steal the connect plan — are unchanged, and remain the reason the matcher runs before anything else.
+- **The model runs only where the matcher gave up.** The `unanswered` branch becomes a second attempt rather than a dead end. Nothing else in `route()` changes its order.
+- **The model's only output is a tool call.** The tools are the intent functions that already exist — `fleetLens`, `agentLens`, `auditLens`, `onboardPlan`, `grantPlan`, `recordPlan`, `paymentPlan`, `connectPlan` — behind a closed, typed surface. Agent arguments are chosen from a live `listAgents` enumeration and record keys from the three this product defines, so the model selects an agent or a key and cannot invent one.
+- **The model never writes the answer.** Its prose is discarded. What renders is the `LensAnswer` or `LensPlan` the existing function assembled from live ENS, ERC 8004, permission and store reads, with its own `readAt` and `provenance` intact. "Every answer is assembled from a read performed when you ask" stays literally true.
+- **Write intents stay plans.** A model-routed `pay`, `grant` or `set` returns a `LensPlan` and performs nothing, on the same path an operator's confirmation already sends. The model can propose an irreversible change and can never be the thing that made it.
+- **How an answer was routed is disclosed.** `ConsoleAnswer` carries the routing decision, the console labels a model-routed answer as understood by a model, and the answer body is still read-derived. The alternative — routing silently — would make the product's central claim depend on the operator not asking.
+- **Model routing fails back to the matcher's state.** A missing credential, a timeout, a 429, an unknown tool name or an argument that does not resolve produces today's `unanswered` with today's suggestions. The chat route returns no 5xx because a model was unavailable.
+- **Agent-supplied text is data.** Agent labels, ENS names and record values enter the user turn, never the system instruction, and never expand the tool surface — `agent-discovery`'s existing requirement, applied to this route.
+- **The console's copy becomes true.** `apps/web/app/console/chat/page.tsx` currently says *"Nothing is generated, so nothing is guessed."* After this change nothing in the answer is generated and the routing sometimes is, and the page says that instead.
+
+## Capabilities
+
+### Modified Capabilities
+
+- `agent-console`: the chat gains a model-backed routing stage behind the matcher. New requirements: a question the matcher misses is routed rather than refused; the model emits a tool call and never an answer; a model-routed answer declares that it was; routing failure degrades to the unanswered state rather than to an error; and the console's standing "never fabricates state" requirement gains the scenario that model prose never reaches an answer body.
+- `api-server`: the chat route gains an outbound model dependency, and with it a bounded timeout, a fall-back path that keeps the route a 200, the routing decision in the request log, and the existing rule that responses carry no secret material extended to the model credential and the raw model response.
+
+## Impact
+
+- **Dependency**: `@google/adk` (Google's ADK for JS, Apache-2.0, `github.com/google/adk-js`, latest 2.0.0). It pulls `@google/genai`, `@mikro-orm/core`, `google-auth-library`, `@a2a-js/sdk` and the OpenTelemetry SDK — about 4 MB unpacked for one route. That is a real cost and design D7 states what it buys and what the fallback is.
+- **Package boundary**: the runner lands in a new `server-only`-guarded package, so `GEMINI_API_KEY` stays behind the same guard as `GRAPH_API_KEY` — the reason `ranking.ts` gives for living in `packages/graph` rather than in a Next route. New package means `apps/web/next.config.ts`'s `transpilePackages`, `apps/api/vitest.config.ts`'s inline list, and `pnpm conditions:check` for any script that takes its entrypoint.
+- **Environment**: `GEMINI_API_KEY` is already in `turbo.json`'s `globalEnv` and `.env.example`, so no new variable if ADK is keyed with it. If it requires `GOOGLE_API_KEY` or Vertex credentials instead, that variable goes into both files in the same commit — `pnpm env:check` is what fails otherwise.
+- **Latency and quota**: Gate E measured this provider refusing under load — `gemini-3.8-flash` returned 429 on three of three runs, `gemini-2.5-flash` answered every time at five to thirteen seconds. A routing call on a screen someone is watching gets a hard timeout, and the timeout expires into the unanswered state rather than into a spinner.
+- **Prompt injection**: an agent label and a record value are operator-supplied and, through discovery, third-party supplied. `docs/12` already treats them as untrusted. The mitigation here is stronger than the ranking step's, because the model's entire output space is a tool name and arguments drawn from closed sets — an injected instruction can at most cause the wrong read, and a read is not a write.
+- **Installing it**: `pnpm install` cannot run in this worktree — it has no network, and a failed install leaves the tree without `node_modules`. The dependency is added from the main checkout.
+- **Cut line**: ADK is the runner, not the contract. If it does not fit the API process or its dependency weight is unacceptable, the same tool schema is sent as a `@google/genai` function-calling request over REST — the way `ranking.ts` already speaks to this provider — and every requirement in this change still holds. If the model path cannot be made reliable at all, the matcher is what ships, which is what ships today.

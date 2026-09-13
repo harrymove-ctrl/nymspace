@@ -47,6 +47,14 @@ export function ConnectFromClaude({
           variant="secondary"
           size="sm"
           label={open ? "Hide Claude setup" : "Connect from Claude"}
+          /*
+            The label already says which way this goes; `aria-expanded` says it
+            to a screen reader, which had only the changing label to go on and
+            no way to know the two states belong to one control. The sound layer
+            reads the same attribute, so the panel opens and closes audibly
+            instead of answering both directions with the same press.
+          */
+          aria-expanded={open}
           onClick={() => setOpen(!open)}
         />
         <Text type="supporting" size="sm">

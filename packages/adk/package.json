@@ -1,0 +1,28 @@
+{
+  "name": "@nymspace/adk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "verify:routing": "tsx --env-file-if-exists=../../.env --conditions=react-server scripts/verify-routing.ts",
+    "measure:routing": "tsx --env-file-if-exists=../../.env --conditions=react-server scripts/measure-routing.ts"
+  },
+  "dependencies": {
+    "@google/adk": "2.0.0",
+    "@google/genai": "^2.22.0",
+    "@nymspace/core": "workspace:*",
+    "server-only": "^0.0.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5",
+    "vitest": "^4.0.18",
+    "tsx": "^4.20.6"
+  }
+}
