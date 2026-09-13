@@ -14,6 +14,7 @@
     "@astryxdesign/core": "^0.5.4",
     "@astryxdesign/theme-neutral": "^0.5.4",
     "@base-ui/react": "^1.8.0",
+    "@nymspace/adk": "workspace:*",
     "@nymspace/api": "workspace:*",
     "@nymspace/core": "workspace:*",
     "@nymspace/ens": "workspace:*",

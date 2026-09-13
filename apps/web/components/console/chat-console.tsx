@@ -13,7 +13,7 @@ import { HStack } from "@astryxdesign/core/HStack";
 import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import * as React from "react";
-import type { ConsoleAnswer, LensPlan, PlanStep } from "@nymspace/core";
+import type { ConsoleAnswer, ConsoleRouting, LensPlan, PlanStep } from "@nymspace/core";
 import { LensCard } from "@/components/console/lens-card";
 import { Loading, Outcome } from "@/components/console/primitives";
 import { apiBaseUrl } from "@/lib/api";
@@ -62,7 +62,18 @@ type Turn =
     type forbids is a branch nobody can ever reach or test.
   */
   | { role: "console"; answer: Exclude<ConsoleAnswer, LensPlan> }
-  | { role: "plan"; plan: LensPlan; settled?: "ran" | "cancelled" }
+  | {
+      role: "plan";
+      plan: LensPlan;
+      /*
+        Carried on the turn rather than on the plan, because `LensPlan` is the
+        offer and this is a fact about how the console arrived at it. The two
+        are separate for the same reason `PlanStep` names its actor: what is
+        being proposed and who proposed it are different questions.
+      */
+      routedBy: ConsoleRouting;
+      settled?: "ran" | "cancelled";
+    }
   | { role: "ran"; plan: LensPlan; outcomes: StepOutcome[] }
   | { role: "problem"; error: ConsoleError };
 
@@ -132,7 +143,7 @@ export function ChatConsole({ suggestions }: { suggestions: readonly string[] })
       setTurns((prev) => [
         ...prev,
         body.kind === "plan"
-          ? { role: "plan", plan: body }
+          ? { role: "plan", plan: body, routedBy: body.routedBy }
           : { role: "console", answer: body },
       ]);
     } catch (cause) {
@@ -400,6 +411,7 @@ function TurnView({
     return (
       <ChatMessage sender="assistant">
         <ChatMessageBubble variant="ghost" width="100%">
+          <Routing stage={turn.routedBy} />
           <PlanCard
             plan={turn.plan}
             settled={turn.settled}
@@ -490,9 +502,36 @@ function ReadTurn({
   return (
     <ChatMessage sender="assistant">
       <ChatMessageBubble variant="ghost" width="100%">
+        <Routing stage={turn.answer.routedBy} />
         <LensCard answer={turn.answer} />
       </ChatMessageBubble>
     </ChatMessage>
+  );
+}
+
+/**
+ * Who chose the subject of the answer below.
+ *
+ * Shown only when a model did. A matched answer renders exactly as it did
+ * before this stage existed, because there is nothing to disclose: the matcher
+ * is a deterministic function of the sentence.
+ *
+ * Deliberately a line of supporting text and not a badge. The tokens that read
+ * as a status on this screen are spoken for — `verified` means ENSIP 25 or an
+ * onchain confirmation — and a routing note wearing one of them would claim
+ * the model checked something. It checked nothing. It picked a question, and
+ * the reads below answered it.
+ */
+function Routing({ stage }: { stage: ConsoleRouting }) {
+  if (stage !== "model") return null;
+  return (
+    <VStack maxWidth="42rem" className="pb-2">
+      <Text type="supporting" as="p">
+        A model matched this to a question the console can answer, then the
+        console read the answer from ENS, the registry and the permission
+        contracts. Ask again with the agent&rsquo;s name if it chose wrong.
+      </Text>
+    </VStack>
   );
 }
 

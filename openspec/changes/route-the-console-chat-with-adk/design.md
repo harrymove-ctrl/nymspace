@@ -123,9 +123,22 @@ The rule it has to satisfy is the one `docs/08` states about approval paths and 
 
 ## Open questions
 
-**OQ1 — Does `@google/adk` run cleanly in the API process?** `apps/api` is Hono on Node via `tsx`, ESM, with workspace packages shipped as TypeScript source. ADK is ESM-first with a CJS main and drags MikroORM and the OpenTelemetry SDK. Whether it imports without pulling in a database driver or an exporter at module scope has to be established by importing it, before any of section 3's work is scheduled. If it does not, the cut line applies immediately rather than after the tool layer is built.
+**OQ1 — Does `@google/adk` run cleanly in the API process? Closed: yes.**
+`@google/adk@2.0.0` imports under `node --conditions=react-server` in about
+250 ms, with no database driver and no telemetry exporter constructed at module
+scope. `Gemini`, `LlmAgent`, `FunctionTool`, `InMemoryRunner` and
+`getFunctionCalls` are all on the root export, and `runner.runEphemeral` is the
+one-turn, no-session call D6 asks for. 159 packages, installed in seconds. The
+cut line stays written down, unexercised.
 
-**OQ2 — Which credential.** `@google/genai` accepts a Gemini API key or Vertex credentials. `GEMINI_API_KEY` is already declared in `turbo.json` and `.env.example`, and reusing it keeps `pnpm env:check` quiet. Confirm ADK reads it directly rather than requiring `GOOGLE_API_KEY` or `GOOGLE_GENAI_USE_VERTEXAI`, and if it requires its own name, add that variable to both files in the same commit.
+**OQ2 — Which credential. Closed: `GEMINI_API_KEY`, and it is passed
+explicitly.** ADK's `Gemini` model takes `apiKey` as a constructor parameter
+and otherwise looks for `GOOGLE_GENAI_API_KEY`, `GOOGLE_API_KEY` and
+`GEMINI_API_KEY` in that order. `deps.ts` reads `GEMINI_API_KEY` — already in
+`turbo.json` and `.env.example`, so `pnpm env:check` needed no new variable —
+and hands it to `createAdkRouter`, so a keyless deployment resolves to no
+router where every other credential resolves, rather than inside a provider
+call on a request.
 
 **OQ3 — Which model, and at what timeout.** Pending measurement under D9. Record the runs the way Gate E recorded its own — model, successes over attempts, observed latency — in this file, and set the constant from that table.
 

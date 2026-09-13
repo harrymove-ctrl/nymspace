@@ -176,16 +176,50 @@ export interface LensPlan {
   closing: string;
 }
 
-export type ConsoleAnswer =
+/**
+ * An answer before anyone has said how its subject was chosen.
+ *
+ * Every builder in the chat route returns one of these. None of them knows
+ * whether the matcher or a model selected it, and none of them should: the
+ * same `agentLens` runs on both paths and must produce the same bytes on
+ * both, which is the property that lets a model near this route at all.
+ */
+export type ConsoleBody =
   | ({ kind: "lens" } & LensAnswer)
   | LensUnanswered
   | LensPlan;
 
-export function isUnanswered(answer: ConsoleAnswer): answer is LensUnanswered {
+/**
+ * Which stage understood the question.
+ *
+ * `matcher` is a deterministic function of the message — the same sentence
+ * produces the same answer on every deployment, forever. `model` is not: a
+ * model picked which read to perform, and the read is what wrote the answer.
+ *
+ * The distinction is on the wire rather than in a log because the operator is
+ * the one who needs it. A console that routed with a model and said nothing
+ * would be relying on nobody asking which part the model did — and the answer
+ * to that question is the difference between a wrong diagram and a correct
+ * diagram of the wrong thing, which is the one an operator can catch at a
+ * glance if told to look.
+ */
+export type ConsoleRouting = "matcher" | "model";
+
+/**
+ * What crosses the wire: the answer, and how its subject was chosen.
+ *
+ * An intersection rather than a field on each member, so the stage is stamped
+ * at the single point the route returns and cannot be defaulted somewhere in
+ * the middle. A default is how an answer nobody routed eventually claims to
+ * have been matched.
+ */
+export type ConsoleAnswer = ConsoleBody & { routedBy: ConsoleRouting };
+
+export function isUnanswered(answer: ConsoleBody): answer is LensUnanswered {
   return answer.kind === "unanswered";
 }
 
-export function isPlan(answer: ConsoleAnswer): answer is LensPlan {
+export function isPlan(answer: ConsoleBody): answer is LensPlan {
   return answer.kind === "plan";
 }
 

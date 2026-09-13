@@ -33,8 +33,10 @@ export default function ChatPage() {
         <Text type="supporting" as="p">
           Ask about an agent. Every answer is assembled from a read performed
           when you ask — ENSv2 for records and authority, the ERC 8004 registry
-          for the registration, each on its own chain. Nothing is generated, so
-          nothing is guessed.
+          for the registration, each on its own chain. Nothing in an answer is
+          generated. A question the console cannot place directly is handed to
+          a model, which chooses which read to perform and writes none of it;
+          answers that went that way say so.
         </Text>
       </VStack>
 
