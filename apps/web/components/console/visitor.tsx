@@ -2,7 +2,6 @@
 
 import {
   PrivyProvider,
-  useConnectWallet,
   useModalStatus,
   usePrivy,
   useWallets,
@@ -58,11 +57,7 @@ interface Visitor {
    */
   ready: boolean;
   address: string | undefined;
-  /**
-   * Opens the wallet picker and returns with an address. Connect only: no
-   * signature is requested and no session is created, because nothing in this
-   * console consumes one. {@link Bridge} has the argument.
-   */
+  /** Opens the wallet picker and returns with an address. */
   connect: () => void;
   disconnect: () => void;
   /**
@@ -132,6 +127,13 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
             of the world. Nine image requests stood between a visitor and the
             button they came for.
 
+            `wallet_connect_qr` rather than `wallet_connect`, which is the entry
+            that *is* that catalogue: Privy's own documentation says it renders
+            every wallet in the WalletConnect registry on desktop, so naming it
+            here reproduced the problem the list was written to solve — verified
+            against the deployed build, which still drew all 594. The `_qr` form
+            is the transport on its own: one button, one code.
+
             Two entries, and the branded `metamask` one is deliberately not
             among them. That absence is the fix for the long "Waiting for
             MetaMask", so it needs the reason written down or someone will
@@ -154,13 +156,13 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
             labelled MetaMask in front of the same visitor — one fast, one over
             the relay, indistinguishable before clicking. Removing it leaves one
             honest choice per situation: the extension when it is there, and an
-            explicit `wallet_connect` QR when it is not.
+            explicit QR when it is not.
 
             `detected_ethereum_wallets` rather than `detected_wallets`: the
             plain one is deprecated in favour of the per-chain pair, and this
             console is `walletChainType`'s `ethereum-only` default.
           */
-          walletList: ["detected_ethereum_wallets", "wallet_connect"],
+          walletList: ["detected_ethereum_wallets", "wallet_connect_qr"],
         },
       }}
     >
@@ -170,79 +172,64 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
 }
 
 function Bridge({ children }: { children: ReactNode }) {
-  const { ready: privyReady, user, logout } = usePrivy();
+  const { ready: privyReady, authenticated, user, login, logout } = usePrivy();
   const { ready: walletsReady, wallets } = useWallets();
   const { isOpen: connecting } = useModalStatus();
-  /*
-    Connect, not log in.
-
-    `login()` authenticates: it opens the modal, takes `eth_requestAccounts`,
-    then fetches a nonce from `/api/v1/siwe/init`, raises a *second* wallet
-    prompt for `personal_sign`, and posts the signature back to
-    `/api/v1/siwe/authenticate` before it will tell you an address. Two wallet
-    prompts and two round-trips to Privy, and this console spends none of what
-    they buy — nothing here reads an access token, calls `getAccessToken`, or
-    sends a Privy identity anywhere. The one thing taken off the session is
-    `address`, and the reads it feeds — `hasRoles` against ENSv2 — are public
-    and unauthenticated by design. See this file's header: a visitor holds no
-    role, and that is the whole point of letting them supply the subject.
-
-    A signature would be worth its cost if something verified it. Proving
-    control of the address would matter the moment the console let you *act* as
-    it; the gate is about acting, but every act behind it is still signed by the
-    server's own key. Until that changes this is a signature nobody checks, and
-    charging a visitor two wallet prompts for it is charging them for nothing.
-
-    `connectWallet` stops after `eth_requestAccounts`: one prompt, no nonce, no
-    signature, no round-trip.
-  */
-  const { connectWallet } = useConnectWallet();
 
   /*
-    `wallets[0]` first now, `user.wallet` second — the reverse of what stood
-    here while this was a login.
+    `login`, not `connectWallet`, and the reason is disconnecting rather than
+    connecting.
 
-    A connected wallet is not an authenticated one, so `authenticated` stays
-    false and `user` stays null on the path above; the live connector list is
-    the only place the address appears. `user.wallet` is kept behind it because
-    a session authenticated before this change is still restorable, and reading
-    it costs nothing.
+    Connecting is the cheaper call and this file used it for a while: it stops
+    after `eth_requestAccounts`, where `login` goes on to fetch a nonce from
+    /api/v1/siwe/init, raise a second wallet prompt for `personal_sign`, and
+    post the signature to /api/v1/siwe/authenticate. Nothing here spends what
+    that buys — no access token is read anywhere in this app — so on the way in
+    it is pure cost.
 
-    That inverts the hazard the old comment described. The list is empty for a
-    moment on reload while connectors reconnect, and there is no restored
-    session to cover the gap any more — so the gap is covered by not claiming to
-    be ready during it. `useWallets` publishes its own `ready` for exactly this,
-    and `ready` below is both. Without that conjunction every reload would flash
-    "Connect" at someone already connected and drop the veil back over a console
-    they had already unlocked.
+    It is the way out that decides it. Privy implements no counterpart to
+    `connectWallet`. `logout` is documented as clearing *authentication* state,
+    and a connected wallet was never authenticated; searching the shipped SDK
+    for a `logout` that tears down a connector finds nothing, in js-sdk-core or
+    in any of react-auth's 196 chunks. `ConnectedWallet.disconnect` exists but
+    is flagged experimental and documented to no-op for exactly the clients that
+    matter, MetaMask named. So a connect-only session has no supported end: the
+    wallet list stays populated, the address below stays set, and the Disconnect
+    button does nothing at all — which is what shipped, and what this restores.
+
+    `authenticated` is the flag `logout` does clear, so pairing `login` with it
+    is the one arrangement where both halves of the control work. The second
+    prompt is the price, and a control that silently fails is worse than a
+    prompt. Worth revisiting only with a real wallet in hand to prove some other
+    teardown works; the speed problem this file was opened for was the wallet
+    picker's transport, fixed above and independent of this.
   */
-  const address = wallets[0]?.address ?? user?.wallet?.address;
+
+  /*
+    `user.wallet` first, `wallets[0]` second.
+
+    They resolve at different times. `useWallets` builds its list from live
+    connectors, which on a reload is empty for a moment while they reconnect,
+    whereas `user.wallet` comes straight from the restored session. Reading only
+    the list meant that after every reload the header showed "Connect" to
+    someone who was still signed in — a false claim about their state, and the
+    one thing this header exists to report.
+
+    Gated on `authenticated`, which is not decoration: it is the only thing
+    `logout` changes, so it is what makes Disconnect visible. Without the gate
+    the address survives its own logout, because `wallets` is not cleared by
+    anything.
+  */
+  const address = authenticated
+    ? (user?.wallet?.address ?? wallets[0]?.address)
+    : undefined;
 
   const value: Visitor = {
     configured: true,
     ready: privyReady && walletsReady,
     address,
-    connect: connectWallet,
-    /*
-      Both, because neither alone covers every visitor this console now has.
-
-      `logout` is documented as clearing *authentication* state, and a connected
-      wallet is not authenticated — so on its own it is the counterpart to the
-      flow this file no longer uses. It stays because a visitor who
-      authenticated before this change still has a session to clear.
-
-      Each wallet's own `disconnect` is the counterpart to `connectWallet`, and
-      Privy is candid that it "will no-op" for clients without programmatic
-      disconnects, naming MetaMask among them. That is not a reason to leave it
-      out: it is the only thing addressed at a connect-only wallet at all, and a
-      no-op costs nothing beside the `logout` that follows it. It is also marked
-      experimental, which the conjunction absorbs — if it changes under us, what
-      is left is exactly today's behaviour rather than a broken control.
-    */
-    disconnect: () => {
-      for (const wallet of wallets) wallet.disconnect();
-      void logout();
-    },
+    connect: login,
+    disconnect: logout,
     connecting,
   };
 
