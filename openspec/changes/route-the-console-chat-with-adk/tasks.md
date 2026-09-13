@@ -306,8 +306,17 @@ Four more, one of them a fix from section 14 that did not go far enough.
   stops the deployment rather than quietly degrading it, and the boot line says
   whether routing is configured. No key stays a supported way to run
 
-- [ ] 15.5 Not this change's, and noticed while reviewing: `.railway/railway.ts`
+- [x] 15.5 Not this change's, and noticed while reviewing: `.railway/railway.ts`
   sets `CONSOLE_MCP_TOKEN` twice in one object literal, so one value silently
   overwrites the other. Nothing catches it because the root `tsconfig.json`
   covering `.railway/` and `scripts/` is not in turbo's `typecheck` pipeline —
-  `pnpm typecheck` runs nine workspaces and the repo root is not one of them
+  `pnpm typecheck` runs nine workspaces and the repo root is not one of them.
+
+  Both fixed. The duplicate is gone and its comment stays, because the reason
+  the *web* service carries a token that is not `NEXT_PUBLIC_` is the part
+  worth keeping — it reaches that service through `...secrets` and looks like a
+  mistake until you know why. The root is now `//#typecheck:repo` in
+  `turbo.json`, so `pnpm typecheck` runs ten tasks rather than nine and covers
+  `.railway/` and `scripts/`. Checked that it is not a vacuous check by putting
+  the duplicate back: `Failed: //#typecheck:repo`. The lesson is the second
+  half — a `tsconfig.json` nothing runs is a `tsconfig.json` that is wrong

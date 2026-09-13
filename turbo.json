@@ -86,6 +86,9 @@
       ],
       "outputs": []
     },
+    "//#typecheck:repo": {
+      "outputs": []
+    },
     "lint": {
       "outputs": []
     },

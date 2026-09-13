@@ -247,7 +247,9 @@ export default defineRailway(() => {
       NEXT_PUBLIC_API_URL: "https://${{api.RAILWAY_PUBLIC_DOMAIN}}",
 
       /*
-        The write token, on the web service as well as the api.
+        `CONSOLE_MCP_TOKEN` reaches this service through `...secrets` below,
+        and is called out here because its presence on the *web* service looks
+        like a mistake until you know why.
 
         Deliberately not `NEXT_PUBLIC_`: Next inlines those into the client
         bundle, and a credential in the bundle is a credential in view source.
@@ -257,8 +259,14 @@ export default defineRailway(() => {
 
         The same value as the api's, because it authorizes the same capability.
         Two tokens would be two things to rotate and one of them forgotten.
+
+        It used to be assigned here as well, which TypeScript reports as
+        `CONSOLE_MCP_TOKEN is specified more than once, so this usage will be
+        overwritten` — harmless, since both sides were `preserve()`, and dead
+        either way because the spread comes after. Nothing caught it: the
+        `tsconfig.json` that covers this directory was not in any typecheck
+        anyone ran. It is now.
       */
-      CONSOLE_MCP_TOKEN: preserve(),
       /**
        * Read at request time by the agent page, never inlined into the client.
        * The permission proof writes the MCP endpoint derived from the same
