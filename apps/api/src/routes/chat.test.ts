@@ -409,3 +409,28 @@ describe("the log", () => {
     expect(lines.filter((line) => line.includes('"chat unrouted"'))).toHaveLength(1);
   });
 });
+
+describe("clearing a record", () => {
+  it("reads as a plan to clear, not a plan to publish a placeholder", async () => {
+    const answer = await ask(
+      "take the endpoint off that one entirely",
+      [],
+      fakeRouter({
+        kind: "call",
+        tool: "plan_record_write",
+        call: {
+          tool: "plan_record_write",
+          agentId: "agent-research",
+          recordKey: "mcp",
+          value: "",
+        },
+        elapsedMs: 11,
+      }),
+    );
+
+    expect(answer.kind).toBe("plan");
+    expect(answer.title).toMatch(/^Clear /);
+    // The value that reaches the route is the empty one, not example.com.
+    expect(answer.steps[0].body.value).toBe("");
+  });
+});

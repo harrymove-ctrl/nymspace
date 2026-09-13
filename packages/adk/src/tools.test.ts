@@ -75,6 +75,40 @@ describe("validation", () => {
     });
   });
 
+  it("keeps an empty record value, because clearing is a value", () => {
+    // `shared.ts` — "An empty value is allowed: clearing the record publishes
+    // no endpoint at all." Dropping it here turned "clear the endpoint" into a
+    // plan to publish a placeholder URL.
+    expect(
+      validateToolCall(
+        "plan_record_write",
+        { agentId: "agent-research", recordKey: "mcp", value: "" },
+        fleet,
+      ),
+    ).toEqual({
+      ok: true,
+      call: { tool: "plan_record_write", agentId: "agent-research", recordKey: "mcp", value: "" },
+    });
+  });
+
+  it("still treats a missing value as missing", () => {
+    expect(
+      validateToolCall(
+        "plan_record_write",
+        { agentId: "agent-research", recordKey: "mcp" },
+        fleet,
+      ),
+    ).toEqual({
+      ok: true,
+      call: {
+        tool: "plan_record_write",
+        agentId: "agent-research",
+        recordKey: "mcp",
+        value: undefined,
+      },
+    });
+  });
+
   it("refuses a record key this product does not define", () => {
     expect(
       validateToolCall(

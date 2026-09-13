@@ -292,31 +292,55 @@ async function main(): Promise<void> {
    * matched answer would differ — and they are produced by the same function
    * on the same reads, so anything that differs came from the model.
    *
+   * It pairs with assertion 3 rather than assertion 1, and that is the point.
+   * Its first version compared the unmatched question's answer against a fixed
+   * `show me the fleet`, which held only while the model chose `show_fleet`
+   * for it — on the run that caught this, the model chose `show_agent` for
+   * research instead, a perfectly good reading, and the comparison reported
+   * two different intents as a difference. An assertion that fails when the
+   * model exercises judgement is measuring the judgement, not the property.
+   *
+   * Assertion 3 has already pinned which agent this reaches, so the matcher
+   * question for it is known: whatever the model selected, the lens is the one
+   * `show billing` produces.
+   *
    * `readAt` is excluded because the two requests happened at different
    * moments, and `routedBy` because saying which stage chose is the one thing
    * this change deliberately added.
-   *
-   * The first version of this assertion searched the bodies for first-person
-   * text instead, and failed on the console's own `unrecognised()` copy — "so
-   * I can only answer about things I can go and check", which is a string in
-   * `chat.ts`. A heuristic that cannot tell the application's voice from a
-   * model's was not measuring the thing it was named after.
    */
-  const matchedFleet = await ask("fleet-matched", "show me the fleet");
+  const matchedAgent = await ask("agent-matched", "show billing");
 
+  /**
+   * Read times out, everything else in.
+   *
+   * Dropping the `readAt` field is not enough: the lens builders also write the
+   * read time into `caption` as a sentence — "read from chain at …" — so two
+   * requests eight seconds apart differed on a timestamp and the comparison
+   * called it a difference. That is the same fact `readAt` carries, in prose,
+   * and it is the one thing about these two answers that is *supposed* to
+   * differ.
+   *
+   * Blanking timestamps rather than the caption, because the caption is
+   * exactly where a model sentence would land and dropping it would hollow out
+   * the assertion. An ISO instant is not something a model would have written
+   * here.
+   */
   const comparable = (body: Record<string, unknown>) => {
     const { readAt: _readAt, routedBy: _routedBy, ...rest } = body;
-    return JSON.stringify(rest);
+    return JSON.stringify(rest).replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "<read-at>");
   };
+
+  const identical = comparable(oneAgent.body) === comparable(matchedAgent.body);
 
   assert(
     7,
     "a model-routed answer is byte-identical to the matcher's answer for the same intent",
-    unmatched.body["kind"] === "lens" &&
-      matchedFleet.body["kind"] === "lens" &&
-      comparable(unmatched.body) === comparable(matchedFleet.body),
-    `${String(unmatched.body["title"])} (model) vs ${String(matchedFleet.body["title"])} (matcher): ` +
-      (comparable(unmatched.body) === comparable(matchedFleet.body) ? "identical" : "differ"),
+    oneAgent.body["kind"] === "lens" &&
+      matchedAgent.body["kind"] === "lens" &&
+      matchedAgent.body["title"] === "billing.nymspace.eth" &&
+      identical,
+    `${String(oneAgent.body["title"])} (model) vs ${String(matchedAgent.body["title"])} (matcher): ` +
+      (identical ? "identical" : "differ"),
   );
 
   const facts = {

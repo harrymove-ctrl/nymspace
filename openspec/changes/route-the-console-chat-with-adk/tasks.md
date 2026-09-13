@@ -320,3 +320,43 @@ Four more, one of them a fix from section 14 that did not go far enough.
   `.railway/` and `scripts/`. Checked that it is not a vacuous check by putting
   the duplicate back: `Failed: //#typecheck:repo`. The lesson is the second
   half — a `tsconfig.json` nothing runs is a `tsconfig.json` that is wrong
+
+## 16. A third review pass
+
+Two of the three were fixes from section 15 that stopped one step short of
+where their own reasoning led. That is a pattern worth naming: the symptom
+disappeared, so the work stopped, and the path the fix implied was left
+half-walked.
+
+- [x] 16.1 `optionalString` treated `""` as absent, so a routed request to
+  clear a record dropped the value and `recordPlan` substituted
+  `https://example.com/<key>` — a plan to publish a fake endpoint where the
+  operator asked to publish none. Empty is a value in this product and
+  `shared.ts` says so. `recordValue` keeps it, the tool description tells the
+  model that clearing is what an empty string means, and a plan to clear now
+  reads as one: "Clear agent-endpoint[mcp]", not "Write" with nothing after it
+- [x] 16.2 The startup failure chosen in 15.4 fails in the format this repo
+  bans: an uncaught throw at module scope is the multi-line stack Railway
+  splits into unrelated entries with no request id. `index.ts` catches it,
+  emits one flat line naming the variable, and exits 1. Choosing the right
+  place to fail and the wrong way to say so is the same half-walk as 15.4
+  itself
+- [x] 16.3 The pagination added in 15.1 broke out of its loop on a failed page
+  and then restored page one's success, so a 429 on page two recorded a pass
+  over a truncated list — the false "absent" it was added to remove, made
+  quieter. An incomplete listing is now a finding of its own and the
+  membership tests do not run against a set that is missing pages. Worth
+  recording that the walk reads 55 models where one page shows 50: five were
+  invisible to this check, so the finding was not hypothetical
+
+- [x] 16.4 Gate G assertion 7 failed twice on the way to being right, and both
+  failures were the assertion rather than the code. It compared the unmatched
+  question's answer against a fixed `show me the fleet`, which held only while
+  the model chose `show_fleet` for it — on one run it chose `show_agent` for
+  research, a perfectly good reading, and two different intents were reported
+  as a difference. Paired with assertion 3's pinned agent instead, it failed
+  again on the read time the lens builders write into `caption` as prose, which
+  `readAt` also carries and which is the one thing two answers eight seconds
+  apart are supposed to disagree about. Timestamps are blanked rather than the
+  caption dropped, because the caption is exactly where a model sentence would
+  land

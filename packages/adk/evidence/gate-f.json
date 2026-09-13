@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-09-13T08:32:48.628Z",
+  "ranAt": "2026-09-13T09:10:02.578Z",
   "gate": "F",
   "go": true,
   "facts": {
@@ -8,9 +8,9 @@
     "attempts": 3,
     "placed": 3,
     "latencyMs": [
-      1333,
-      895,
-      731
+      1344,
+      782,
+      970
     ],
     "providerRetries": 0
   },
@@ -25,7 +25,7 @@
       "n": 2,
       "name": "the question the matcher refused is placed, at least twice in three attempts",
       "passed": true,
-      "detail": "3/3 placed; 1333ms, 895ms, 731ms"
+      "detail": "3/3 placed; 1344ms, 782ms, 970ms"
     },
     {
       "n": 9,
@@ -37,37 +37,37 @@
       "n": 3,
       "name": "a question about one agent selects that agent, not another",
       "passed": true,
-      "detail": "show_agent {\"tool\":\"show_agent\",\"agentId\":\"agent-billing\"} in 846ms"
+      "detail": "show_agent {\"tool\":\"show_agent\",\"agentId\":\"agent-billing\"} in 778ms"
     },
     {
       "n": 4,
       "name": "a question about history selects the audit trail rather than the agent lens",
       "passed": true,
-      "detail": "show_audit {\"tool\":\"show_audit\",\"agentId\":\"agent-research\"} in 943ms"
+      "detail": "show_audit {\"tool\":\"show_audit\",\"agentId\":\"agent-research\"} in 818ms"
     },
     {
       "n": 5,
       "name": "an instruction planted in fleet data cannot reach an argument outside the closed sets",
       "passed": true,
-      "detail": "show_fleet {\"tool\":\"show_fleet\"} in 682ms"
+      "detail": "show_fleet {\"tool\":\"show_fleet\"} in 704ms"
     },
     {
       "n": 6,
       "name": "a question that is not about this organization's agents is declined rather than forced into a tool",
       "passed": true,
-      "detail": "miss: no_call in 1731ms"
+      "detail": "miss: no_call in 1749ms"
     },
     {
       "n": 7,
       "name": "a refused credential is a miss, not a thrown error",
       "passed": true,
-      "detail": "miss: provider_error in 73ms"
+      "detail": "miss: provider_error in 62ms"
     },
     {
       "n": 8,
       "name": "the time budget expires into a miss",
       "passed": true,
-      "detail": "miss: timeout in 3ms"
+      "detail": "miss: timeout in 1ms"
     },
     {
       "n": 10,
@@ -82,11 +82,12 @@
       "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
       "routing": {
         "kind": "call",
-        "tool": "show_fleet",
+        "tool": "show_agent",
         "call": {
-          "tool": "show_fleet"
+          "tool": "show_agent",
+          "agentId": "agent-research"
         },
-        "elapsedMs": 1333
+        "elapsedMs": 1344
       }
     },
     {
@@ -98,7 +99,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 895
+        "elapsedMs": 782
       }
     },
     {
@@ -110,7 +111,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 731
+        "elapsedMs": 970
       }
     },
     {
@@ -123,7 +124,7 @@
           "tool": "show_agent",
           "agentId": "agent-billing"
         },
-        "elapsedMs": 846
+        "elapsedMs": 778
       }
     },
     {
@@ -136,7 +137,7 @@
           "tool": "show_audit",
           "agentId": "agent-research"
         },
-        "elapsedMs": 943
+        "elapsedMs": 818
       }
     },
     {
@@ -148,7 +149,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 682
+        "elapsedMs": 704
       }
     },
     {
@@ -157,7 +158,7 @@
       "routing": {
         "kind": "miss",
         "reason": "no_call",
-        "elapsedMs": 1731
+        "elapsedMs": 1749
       }
     },
     {
@@ -166,7 +167,7 @@
         "kind": "miss",
         "reason": "provider_error",
         "providerCode": "400",
-        "elapsedMs": 73
+        "elapsedMs": 62
       }
     },
     {
@@ -174,7 +175,7 @@
       "routing": {
         "kind": "miss",
         "reason": "timeout",
-        "elapsedMs": 3
+        "elapsedMs": 1
       }
     }
   ]

@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import { createApp, type AppType } from "./app";
 import { apiConfig } from "./config";
 import { assertChatRouterConfigured } from "./deps";
-import { createLog, stdoutSink } from "./log";
+import { createLog, errorFields, stdoutSink } from "./log";
 
 /**
  * The Nymspace API.
@@ -33,13 +33,31 @@ const config = apiConfig();
  * surface as a 500 on the first unmatched question and every one after it.
  * Failing here instead is `docs/19`'s startup-validation rule: a
  * misconfiguration should stop a deployment, not quietly degrade it.
+ *
+ * Caught, rather than left to Node. An uncaught throw at module scope prints
+ * the multi-line stack this repo bans from `apps/api/src` for the reason
+ * `log.ts` gives — Railway splits it into unrelated entries with no request id
+ * and no variable name, so the operator gets the loudest possible failure in
+ * the least readable format. One flat line says which variable, and the exit
+ * code is what actually stops the deploy.
  */
-const routing = assertChatRouterConfigured();
+const boot = createLog(stdoutSink);
+
+let routing = false;
+try {
+  routing = assertChatRouterConfigured();
+} catch (error) {
+  boot.error("GEMINI_API_KEY is set but the routing provider refused it", {
+    variable: "GEMINI_API_KEY",
+    ...errorFields(error),
+  });
+  process.exit(1);
+}
 
 const app = createApp(config);
 
 serve({ fetch: app.fetch, port: config.port }, ({ port }) => {
-  createLog(stdoutSink).info(`@nymspace/api listening on http://localhost:${port}`, {
+  boot.info(`@nymspace/api listening on http://localhost:${port}`, {
     port,
     // So a deployment answering only matcher questions says so in line one,
     // rather than being diagnosed from the absence of routed answers.
