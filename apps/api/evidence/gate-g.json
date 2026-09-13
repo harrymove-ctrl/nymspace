@@ -1,0 +1,970 @@
+{
+  "ranAt": "2026-09-13T07:48:50.773Z",
+  "gate": "G",
+  "go": true,
+  "facts": {
+    "model": "gemini-3.5-flash-lite",
+    "fleetSize": 3,
+    "providerRetries": 2,
+    "questions": 9
+  },
+  "assertions": [
+    {
+      "n": 1,
+      "name": "the question the deployed console refused is answered, over HTTP, by a model's selection",
+      "passed": true,
+      "detail": "200 lens routedBy=model — Fleet"
+    },
+    {
+      "n": 2,
+      "name": "a question the matcher knows is still answered by the matcher",
+      "passed": true,
+      "detail": "lens routedBy=matcher — research.nymspace.eth"
+    },
+    {
+      "n": 3,
+      "name": "a described agent reaches that agent's lens, not another's",
+      "passed": true,
+      "detail": "lens — billing.nymspace.eth"
+    },
+    {
+      "n": 4,
+      "name": "a question about history reaches the audit trail",
+      "passed": true,
+      "detail": "lens — research.nymspace.eth"
+    },
+    {
+      "n": 5,
+      "name": "a routed payment is a plan the operator has to accept, and nothing was sent",
+      "passed": true,
+      "detail": "plan — /v1/agents/agent-billing/payments/preview, /v1/agents/agent-billing/payments"
+    },
+    {
+      "n": 6,
+      "name": "a question this console cannot answer returns the unanswered state with a 200",
+      "passed": true,
+      "detail": "200 unanswered"
+    },
+    {
+      "n": 7,
+      "name": "a model-routed answer is byte-identical to the matcher's answer for the same intent",
+      "passed": true,
+      "detail": "Fleet (model) vs Fleet (matcher): identical"
+    }
+  ],
+  "runs": [
+    {
+      "label": "unmatched",
+      "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
+      "status": 200,
+      "body": {
+        "kind": "lens",
+        "title": "Fleet",
+        "pills": [
+          {
+            "label": "3 agents",
+            "tone": "active"
+          },
+          {
+            "label": "3 verified",
+            "tone": "verified"
+          },
+          {
+            "label": "0 unverified",
+            "tone": "verified"
+          }
+        ],
+        "lanes": [
+          "ENS",
+          "ERC 8004",
+          "VERIFICATION"
+        ],
+        "nodes": [
+          {
+            "id": "agent-research:ens",
+            "lane": "ENS",
+            "label": "research.nymspace.eth",
+            "sublabel": "active",
+            "badge": "active",
+            "tone": "active",
+            "href": "/console/agents/agent-research"
+          },
+          {
+            "id": "agent-research:erc8004",
+            "lane": "ERC 8004",
+            "label": "not registered",
+            "sublabel": "registered",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-research:ensip25",
+            "lane": "VERIFICATION",
+            "label": "verified",
+            "sublabel": "ENSIP 25",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-support:ens",
+            "lane": "ENS",
+            "label": "support.nymspace.eth",
+            "sublabel": "active",
+            "badge": "active",
+            "tone": "active",
+            "href": "/console/agents/agent-support"
+          },
+          {
+            "id": "agent-support:erc8004",
+            "lane": "ERC 8004",
+            "label": "not registered",
+            "sublabel": "registered",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-support:ensip25",
+            "lane": "VERIFICATION",
+            "label": "verified",
+            "sublabel": "ENSIP 25",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-billing:ens",
+            "lane": "ENS",
+            "label": "billing.nymspace.eth",
+            "sublabel": "active",
+            "badge": "active",
+            "tone": "active",
+            "href": "/console/agents/agent-billing"
+          },
+          {
+            "id": "agent-billing:erc8004",
+            "lane": "ERC 8004",
+            "label": "not registered",
+            "sublabel": "registered",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-billing:ensip25",
+            "lane": "VERIFICATION",
+            "label": "verified",
+            "sublabel": "ENSIP 25",
+            "tone": "verified"
+          }
+        ],
+        "edges": [
+          {
+            "from": "agent-research:ens",
+            "to": "agent-research:erc8004",
+            "tone": "active"
+          },
+          {
+            "from": "agent-research:erc8004",
+            "to": "agent-research:ensip25",
+            "label": "claims",
+            "tone": "verified"
+          },
+          {
+            "from": "agent-support:ens",
+            "to": "agent-support:erc8004",
+            "tone": "active"
+          },
+          {
+            "from": "agent-support:erc8004",
+            "to": "agent-support:ensip25",
+            "label": "claims",
+            "tone": "verified"
+          },
+          {
+            "from": "agent-billing:ens",
+            "to": "agent-billing:erc8004",
+            "tone": "active"
+          },
+          {
+            "from": "agent-billing:erc8004",
+            "to": "agent-billing:ensip25",
+            "label": "claims",
+            "tone": "verified"
+          }
+        ],
+        "caption": "3 agents across 3 systems. Provisioning progress is the store's own record; open an agent to read its state from chain.",
+        "detail": [
+          {
+            "label": "research.nymspace.eth",
+            "value": "ens=active erc8004=registered ensip25=verified graph=indexed financial=policy_configured",
+            "provenance": "STORE"
+          },
+          {
+            "label": "support.nymspace.eth",
+            "value": "ens=active erc8004=registered ensip25=verified graph=indexed financial=policy_configured",
+            "provenance": "STORE"
+          },
+          {
+            "label": "billing.nymspace.eth",
+            "value": "ens=active erc8004=registered ensip25=verified graph=indexed financial=policy_configured",
+            "provenance": "STORE"
+          }
+        ],
+        "readAt": "2026-09-13T07:48:29.820Z",
+        "routedBy": "model"
+      }
+    },
+    {
+      "label": "matched",
+      "message": "show research",
+      "status": 200,
+      "body": {
+        "kind": "lens",
+        "title": "research.nymspace.eth",
+        "pills": [
+          {
+            "label": "unchecked",
+            "tone": "unknown"
+          },
+          {
+            "label": "0 allowed",
+            "tone": "unknown"
+          },
+          {
+            "label": "3 denied",
+            "tone": "denied"
+          }
+        ],
+        "lanes": [
+          "IDENTITY",
+          "AUTHORITY",
+          "RECORDS"
+        ],
+        "nodes": [
+          {
+            "id": "name",
+            "lane": "IDENTITY",
+            "label": "research.nymspace.eth",
+            "sublabel": "owner 0x0000…0001",
+            "badge": "unchecked",
+            "tone": "unknown",
+            "href": "/console/agents/agent-research"
+          },
+          {
+            "id": "perm:agent-context",
+            "lane": "AUTHORITY",
+            "label": "agent-context",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-context",
+            "lane": "RECORDS",
+            "label": "agent-context",
+            "sublabel": "not set",
+            "tone": "absent"
+          },
+          {
+            "id": "perm:agent-endpoint[mcp]",
+            "lane": "AUTHORITY",
+            "label": "agent-endpoint[mcp]",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-endpoint[mcp]",
+            "lane": "RECORDS",
+            "label": "agent-endpoint[mcp]",
+            "sublabel": "not set",
+            "tone": "absent"
+          },
+          {
+            "id": "perm:agent-endpoint[a2a]",
+            "lane": "AUTHORITY",
+            "label": "agent-endpoint[a2a]",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-endpoint[a2a]",
+            "lane": "RECORDS",
+            "label": "agent-endpoint[a2a]",
+            "sublabel": "not set",
+            "tone": "absent"
+          }
+        ],
+        "edges": [
+          {
+            "from": "name",
+            "to": "perm:agent-context",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-context",
+            "to": "rec:agent-context",
+            "label": "may not write",
+            "tone": "denied"
+          },
+          {
+            "from": "name",
+            "to": "perm:agent-endpoint[mcp]",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-endpoint[mcp]",
+            "to": "rec:agent-endpoint[mcp]",
+            "label": "may not write",
+            "tone": "denied"
+          },
+          {
+            "from": "name",
+            "to": "perm:agent-endpoint[a2a]",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-endpoint[a2a]",
+            "to": "rec:agent-endpoint[a2a]",
+            "label": "may not write",
+            "tone": "denied"
+          }
+        ],
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T07:48:31.329Z.",
+        "detail": [
+          {
+            "label": "Owner",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Controller",
+            "value": "0xDEA25D2537cE06cE1073dd9621C70056CBDC3aEB",
+            "provenance": "STORE"
+          },
+          {
+            "label": "Registry",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Resolver",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "ENSIP 25",
+            "value": "unchecked",
+            "provenance": "CHAIN 84532"
+          },
+          {
+            "label": "agent-context",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "agent-endpoint[mcp]",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "agent-endpoint[a2a]",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Positive control",
+            "value": "0x0000…0001 on agent-endpoint[mcp] → DENIED — the read path is not working",
+            "provenance": "CHAIN 11155111"
+          }
+        ],
+        "readAt": "2026-09-13T07:48:31.329Z",
+        "routedBy": "matcher"
+      }
+    },
+    {
+      "label": "one-agent",
+      "message": "which of these handles invoices, and what is it allowed to write",
+      "status": 200,
+      "body": {
+        "kind": "lens",
+        "title": "billing.nymspace.eth",
+        "pills": [
+          {
+            "label": "unchecked",
+            "tone": "unknown"
+          },
+          {
+            "label": "0 allowed",
+            "tone": "unknown"
+          },
+          {
+            "label": "3 denied",
+            "tone": "denied"
+          }
+        ],
+        "lanes": [
+          "IDENTITY",
+          "AUTHORITY",
+          "RECORDS"
+        ],
+        "nodes": [
+          {
+            "id": "name",
+            "lane": "IDENTITY",
+            "label": "billing.nymspace.eth",
+            "sublabel": "owner 0x0000…0001",
+            "badge": "unchecked",
+            "tone": "unknown",
+            "href": "/console/agents/agent-billing"
+          },
+          {
+            "id": "perm:agent-context",
+            "lane": "AUTHORITY",
+            "label": "agent-context",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-context",
+            "lane": "RECORDS",
+            "label": "agent-context",
+            "sublabel": "not set",
+            "tone": "absent"
+          },
+          {
+            "id": "perm:agent-endpoint[mcp]",
+            "lane": "AUTHORITY",
+            "label": "agent-endpoint[mcp]",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-endpoint[mcp]",
+            "lane": "RECORDS",
+            "label": "agent-endpoint[mcp]",
+            "sublabel": "not set",
+            "tone": "absent"
+          },
+          {
+            "id": "perm:agent-endpoint[a2a]",
+            "lane": "AUTHORITY",
+            "label": "agent-endpoint[a2a]",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-endpoint[a2a]",
+            "lane": "RECORDS",
+            "label": "agent-endpoint[a2a]",
+            "sublabel": "not set",
+            "tone": "absent"
+          }
+        ],
+        "edges": [
+          {
+            "from": "name",
+            "to": "perm:agent-context",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-context",
+            "to": "rec:agent-context",
+            "label": "may not write",
+            "tone": "denied"
+          },
+          {
+            "from": "name",
+            "to": "perm:agent-endpoint[mcp]",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-endpoint[mcp]",
+            "to": "rec:agent-endpoint[mcp]",
+            "label": "may not write",
+            "tone": "denied"
+          },
+          {
+            "from": "name",
+            "to": "perm:agent-endpoint[a2a]",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-endpoint[a2a]",
+            "to": "rec:agent-endpoint[a2a]",
+            "label": "may not write",
+            "tone": "denied"
+          }
+        ],
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T07:48:33.586Z.",
+        "detail": [
+          {
+            "label": "Owner",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Controller",
+            "value": "0xDEA25D2537cE06cE1073dd9621C70056CBDC3aEB",
+            "provenance": "STORE"
+          },
+          {
+            "label": "Registry",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Resolver",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "ENSIP 25",
+            "value": "unchecked",
+            "provenance": "CHAIN 84532"
+          },
+          {
+            "label": "agent-context",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "agent-endpoint[mcp]",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "agent-endpoint[a2a]",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Positive control",
+            "value": "0x0000…0001 on agent-endpoint[mcp] → DENIED — the read path is not working",
+            "provenance": "CHAIN 11155111"
+          }
+        ],
+        "readAt": "2026-09-13T07:48:33.586Z",
+        "routedBy": "model"
+      }
+    },
+    {
+      "label": "history",
+      "message": "what has happened to research since it was set up",
+      "status": 200,
+      "body": {
+        "kind": "lens",
+        "title": "research.nymspace.eth",
+        "pills": [
+          {
+            "label": "unchecked",
+            "tone": "unknown"
+          },
+          {
+            "label": "0 allowed",
+            "tone": "unknown"
+          },
+          {
+            "label": "3 denied",
+            "tone": "denied"
+          }
+        ],
+        "lanes": [
+          "IDENTITY",
+          "AUTHORITY",
+          "RECORDS"
+        ],
+        "nodes": [
+          {
+            "id": "name",
+            "lane": "IDENTITY",
+            "label": "research.nymspace.eth",
+            "sublabel": "owner 0x0000…0001",
+            "badge": "unchecked",
+            "tone": "unknown",
+            "href": "/console/agents/agent-research"
+          },
+          {
+            "id": "perm:agent-context",
+            "lane": "AUTHORITY",
+            "label": "agent-context",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-context",
+            "lane": "RECORDS",
+            "label": "agent-context",
+            "sublabel": "not set",
+            "tone": "absent"
+          },
+          {
+            "id": "perm:agent-endpoint[mcp]",
+            "lane": "AUTHORITY",
+            "label": "agent-endpoint[mcp]",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-endpoint[mcp]",
+            "lane": "RECORDS",
+            "label": "agent-endpoint[mcp]",
+            "sublabel": "not set",
+            "tone": "absent"
+          },
+          {
+            "id": "perm:agent-endpoint[a2a]",
+            "lane": "AUTHORITY",
+            "label": "agent-endpoint[a2a]",
+            "sublabel": "controller 0xDEA2…3aEB",
+            "badge": "denied",
+            "tone": "denied"
+          },
+          {
+            "id": "rec:agent-endpoint[a2a]",
+            "lane": "RECORDS",
+            "label": "agent-endpoint[a2a]",
+            "sublabel": "not set",
+            "tone": "absent"
+          }
+        ],
+        "edges": [
+          {
+            "from": "name",
+            "to": "perm:agent-context",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-context",
+            "to": "rec:agent-context",
+            "label": "may not write",
+            "tone": "denied"
+          },
+          {
+            "from": "name",
+            "to": "perm:agent-endpoint[mcp]",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-endpoint[mcp]",
+            "to": "rec:agent-endpoint[mcp]",
+            "label": "may not write",
+            "tone": "denied"
+          },
+          {
+            "from": "name",
+            "to": "perm:agent-endpoint[a2a]",
+            "tone": "denied"
+          },
+          {
+            "from": "perm:agent-endpoint[a2a]",
+            "to": "rec:agent-endpoint[a2a]",
+            "label": "may not write",
+            "tone": "denied"
+          }
+        ],
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T07:48:35.087Z.",
+        "detail": [
+          {
+            "label": "Owner",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Controller",
+            "value": "0xDEA25D2537cE06cE1073dd9621C70056CBDC3aEB",
+            "provenance": "STORE"
+          },
+          {
+            "label": "Registry",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Resolver",
+            "value": "0x0000000000000000000000000000000000000001",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "ENSIP 25",
+            "value": "unchecked",
+            "provenance": "CHAIN 84532"
+          },
+          {
+            "label": "agent-context",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "agent-endpoint[mcp]",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "agent-endpoint[a2a]",
+            "value": "denied",
+            "provenance": "CHAIN 11155111"
+          },
+          {
+            "label": "Positive control",
+            "value": "0x0000…0001 on agent-endpoint[mcp] → DENIED — the read path is not working",
+            "provenance": "CHAIN 11155111"
+          }
+        ],
+        "readAt": "2026-09-13T07:48:35.087Z",
+        "routedBy": "matcher"
+      }
+    },
+    {
+      "label": "pay",
+      "message": "move 0.0001 ether out of the one that handles invoices, to whoever owns it",
+      "status": 200,
+      "body": {
+        "kind": "plan",
+        "title": "Pay from the agent wallet",
+        "summary": "Checks the amount against the wallet's Privy policy, then sends it. Native ETH on Base Sepolia — this adapter does not transfer tokens, whatever a policy's tokenAddress says.",
+        "steps": [
+          {
+            "title": "Preview against the spend limit",
+            "method": "POST",
+            "path": "/v1/agents/agent-billing/payments/preview",
+            "body": {
+              "amount": "100000000000000",
+              "recipient": "0xDEA25D2537cE06cE1073dd9621C70056CBDC3aEB"
+            },
+            "actor": "agent wallet"
+          },
+          {
+            "title": "Send the payment",
+            "method": "POST",
+            "path": "/v1/agents/agent-billing/payments",
+            "body": {
+              "amount": "100000000000000",
+              "recipient": "0xDEA25D2537cE06cE1073dd9621C70056CBDC3aEB"
+            },
+            "actor": "agent wallet",
+            "expectDenial": "Over the per-transaction limit, Privy refuses on the signing path and no transaction is broadcast. Under it, this succeeds."
+          }
+        ],
+        "closing": "The preview and the outcome are separate evidence: one is the policy, the other is what the signer did with it.",
+        "routedBy": "model"
+      }
+    },
+    {
+      "label": "off-topic",
+      "message": "what is the weather in Hanoi tomorrow",
+      "status": 200,
+      "body": {
+        "kind": "unanswered",
+        "message": "I did not recognise an agent or a topic in that. I answer from live ENS, ERC 8004 and permission reads, so I can only answer about things I can go and check.",
+        "suggestions": [
+          "show me the fleet",
+          "show research",
+          "create a support agent",
+          "let research update its agent-context",
+          "as research, set agent-context to \"Specialized in ENS research\"",
+          "as research, set its mcp endpoint to https://example.com/mcp",
+          "what does research's mcp serve",
+          "pay 0.0001 ETH from research to research",
+          "show the audit trail for research"
+        ],
+        "routedBy": "matcher"
+      }
+    },
+    {
+      "label": "off-topic",
+      "message": "what is the weather in Hanoi tomorrow",
+      "status": 200,
+      "body": {
+        "kind": "unanswered",
+        "message": "I did not recognise an agent or a topic in that. I answer from live ENS, ERC 8004 and permission reads, so I can only answer about things I can go and check.",
+        "suggestions": [
+          "show me the fleet",
+          "show research",
+          "create a support agent",
+          "let research update its agent-context",
+          "as research, set agent-context to \"Specialized in ENS research\"",
+          "as research, set its mcp endpoint to https://example.com/mcp",
+          "what does research's mcp serve",
+          "pay 0.0001 ETH from research to research",
+          "show the audit trail for research"
+        ],
+        "routedBy": "matcher"
+      }
+    },
+    {
+      "label": "off-topic",
+      "message": "what is the weather in Hanoi tomorrow",
+      "status": 200,
+      "body": {
+        "kind": "unanswered",
+        "message": "I did not recognise an agent or a topic in that. I answer from live ENS, ERC 8004 and permission reads, so I can only answer about things I can go and check.",
+        "suggestions": [
+          "show me the fleet",
+          "show research",
+          "create a support agent",
+          "let research update its agent-context",
+          "as research, set agent-context to \"Specialized in ENS research\"",
+          "as research, set its mcp endpoint to https://example.com/mcp",
+          "what does research's mcp serve",
+          "pay 0.0001 ETH from research to research",
+          "show the audit trail for research"
+        ],
+        "routedBy": "matcher"
+      }
+    },
+    {
+      "label": "fleet-matched",
+      "message": "show me the fleet",
+      "status": 200,
+      "body": {
+        "kind": "lens",
+        "title": "Fleet",
+        "pills": [
+          {
+            "label": "3 agents",
+            "tone": "active"
+          },
+          {
+            "label": "3 verified",
+            "tone": "verified"
+          },
+          {
+            "label": "0 unverified",
+            "tone": "verified"
+          }
+        ],
+        "lanes": [
+          "ENS",
+          "ERC 8004",
+          "VERIFICATION"
+        ],
+        "nodes": [
+          {
+            "id": "agent-research:ens",
+            "lane": "ENS",
+            "label": "research.nymspace.eth",
+            "sublabel": "active",
+            "badge": "active",
+            "tone": "active",
+            "href": "/console/agents/agent-research"
+          },
+          {
+            "id": "agent-research:erc8004",
+            "lane": "ERC 8004",
+            "label": "not registered",
+            "sublabel": "registered",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-research:ensip25",
+            "lane": "VERIFICATION",
+            "label": "verified",
+            "sublabel": "ENSIP 25",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-support:ens",
+            "lane": "ENS",
+            "label": "support.nymspace.eth",
+            "sublabel": "active",
+            "badge": "active",
+            "tone": "active",
+            "href": "/console/agents/agent-support"
+          },
+          {
+            "id": "agent-support:erc8004",
+            "lane": "ERC 8004",
+            "label": "not registered",
+            "sublabel": "registered",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-support:ensip25",
+            "lane": "VERIFICATION",
+            "label": "verified",
+            "sublabel": "ENSIP 25",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-billing:ens",
+            "lane": "ENS",
+            "label": "billing.nymspace.eth",
+            "sublabel": "active",
+            "badge": "active",
+            "tone": "active",
+            "href": "/console/agents/agent-billing"
+          },
+          {
+            "id": "agent-billing:erc8004",
+            "lane": "ERC 8004",
+            "label": "not registered",
+            "sublabel": "registered",
+            "tone": "verified"
+          },
+          {
+            "id": "agent-billing:ensip25",
+            "lane": "VERIFICATION",
+            "label": "verified",
+            "sublabel": "ENSIP 25",
+            "tone": "verified"
+          }
+        ],
+        "edges": [
+          {
+            "from": "agent-research:ens",
+            "to": "agent-research:erc8004",
+            "tone": "active"
+          },
+          {
+            "from": "agent-research:erc8004",
+            "to": "agent-research:ensip25",
+            "label": "claims",
+            "tone": "verified"
+          },
+          {
+            "from": "agent-support:ens",
+            "to": "agent-support:erc8004",
+            "tone": "active"
+          },
+          {
+            "from": "agent-support:erc8004",
+            "to": "agent-support:ensip25",
+            "label": "claims",
+            "tone": "verified"
+          },
+          {
+            "from": "agent-billing:ens",
+            "to": "agent-billing:erc8004",
+            "tone": "active"
+          },
+          {
+            "from": "agent-billing:erc8004",
+            "to": "agent-billing:ensip25",
+            "label": "claims",
+            "tone": "verified"
+          }
+        ],
+        "caption": "3 agents across 3 systems. Provisioning progress is the store's own record; open an agent to read its state from chain.",
+        "detail": [
+          {
+            "label": "research.nymspace.eth",
+            "value": "ens=active erc8004=registered ensip25=verified graph=indexed financial=policy_configured",
+            "provenance": "STORE"
+          },
+          {
+            "label": "support.nymspace.eth",
+            "value": "ens=active erc8004=registered ensip25=verified graph=indexed financial=policy_configured",
+            "provenance": "STORE"
+          },
+          {
+            "label": "billing.nymspace.eth",
+            "value": "ens=active erc8004=registered ensip25=verified graph=indexed financial=policy_configured",
+            "provenance": "STORE"
+          }
+        ],
+        "readAt": "2026-09-13T07:48:50.772Z",
+        "routedBy": "matcher"
+      }
+    }
+  ]
+}

@@ -189,6 +189,7 @@ the ENSIP 25 binding by the contract itself, not by an application check.
 | **ENS** | ENSv2 subnames with record-scoped delegation through a PermissionedResolver; ENSIP 26 records; ENSIP 25 binding verified at runtime with a seven-state model | Gate A, 10/10 |
 | **The Graph** | Live Agent0 ERC 8004 queries, normalisation that preserves absence, an LLM ranking whose every citation is validated against the response | Gate B, 7/7 |
 | **Privy** | One amount policy on a server wallet; a denied payment and an allowed one in the same run, with the limit read from the live policy | Gate C, 10/10 |
+| **Google ADK** | A tool-calling agent that routes a console question to one of eight live reads and writes no part of the answer: its arguments are drawn from the fleet the store just returned, its prose is discarded, and a routed answer is byte-identical to the matcher's | Gate F, 10/10; Gate G, 7/7 |
 
 ### Transaction evidence
 

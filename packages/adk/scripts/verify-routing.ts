@@ -129,9 +129,40 @@ async function main(): Promise<void> {
    */
   const spacing = () => new Promise((done) => setTimeout(done, 1_500));
 
+  /**
+   * A step is retried when the provider failed it, and not when the model did.
+   *
+   * The distinction is the whole point of this helper. A gate whose verdict
+   * moves with the provider's latency is not measuring the routing stage: the
+   * first run after the `origin/main` merge failed four assertions on 5.7s,
+   * 10.0s and 10.0s, and the identical code passed 9/9 minutes later between
+   * 0.9s and 1.8s. Nothing about the code was different. A red result that
+   * means "Gemini was slow at 13:47" gets explained once and then ignored,
+   * and the day a real regression lands it arrives in a column that is
+   * already red.
+   *
+   * So a timeout or a provider error is a *condition*, retried up to twice and
+   * counted; `no_call` is the model declining and is never retried, because
+   * that is a result this gate exists to observe. If the provider fails every
+   * attempt the step still fails, with a detail saying which — and assertion
+   * 10 fails the whole gate when the conditions outnumbered the answers,
+   * because at that point the run has not measured the routing stage at all.
+   */
+  let providerRetries = 0;
+
   const route = async (label: string, message: string, fleet = FLEET) => {
     await spacing();
-    const routing = await router.route({ message, fleet });
+
+    let routing = await router.route({ message, fleet });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (routing.kind !== "miss") break;
+      if (routing.reason !== "timeout" && routing.reason !== "provider_error") break;
+      providerRetries += 1;
+      runs.push({ label: `${label}:provider-retry`, routing });
+      await spacing();
+      routing = await router.route({ message, fleet });
+    }
+
     runs.push({ label, message, routing });
     console.log(`\n[${label}] ${describe(routing)}`);
     return routing;
@@ -267,6 +298,23 @@ async function main(): Promise<void> {
     "the time budget expires into a miss",
     expired.kind === "miss" && expired.reason === "timeout",
     describe(expired),
+  );
+
+  facts["providerRetries"] = providerRetries;
+
+  assert(
+    10,
+    "the run measured the routing stage rather than the provider's weather",
+    /**
+     * More provider conditions than assertions means the gate spent the run
+     * waiting rather than observing, and a green verdict from that would be
+     * luck. The threshold is deliberately generous — one retry per assertion —
+     * because this provider's latency genuinely moves by an order of magnitude
+     * within an hour, and a gate that fails on the first slow call is the
+     * flakiness this assertion replaces.
+     */
+    providerRetries <= assertions.length,
+    `${providerRetries} provider retries across ${assertions.length} assertions`,
   );
 
   const failures = assertions.filter((assertion) => !assertion.passed);

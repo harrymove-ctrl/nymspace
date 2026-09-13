@@ -101,11 +101,10 @@ in unit tests first.
 
 ## 10. Still open
 
-- [ ] 10.1 Run Gate F against the deployed console rather than a synthetic
-  fleet. `apps/api` typechecks again as of section 11, so what remains is an
-  environment: this sandbox refuses an outbound connection to the local
-  Postgres, so `listAgents` cannot be the thing that fills the enumeration in a
-  gate run here
+- [x] 10.1 Run the routing stage against the real route rather than only the
+  real router. Gate G, section 13. A live Postgres is still out of reach in
+  this sandbox — Docker's socket and every localhost port are refused — so the
+  store stays a fixture; everything above it is the deployed path
 - [x] 10.2 Test ADK's own loop with a stub `BaseLlm`. Done — `router.test.ts`,
   twelve cases: first-call-wins, prose discarded, the error-event mapping, the
   `STOP` exception, out-of-set arguments, and the four retry rules
@@ -184,10 +183,56 @@ commits ahead, and four of the five repairs in section 11 were already there —
   `env:check` 58 variables, `conditions:check` 27 entrypoints, core 29, ens 73,
   adk 24, api 8 of 10 files. Gate F 9/9 live
 
-- [ ] 12.7 Gate F is not deterministic, and the merge run proved it. The first
+- [x] 12.7 Gate F is not deterministic, and the merge run proved it. The first
   run after merging failed four assertions on the time budget — 5.7s, 10.0s,
   10.0s — and the identical code passed 9/9 minutes later at 0.9-1.8s. That is
   the provider's latency variance, already recorded in `model.ts`, showing up
-  as a red gate. Worth deciding what a gate should do about a dependency that
-  moves by an order of magnitude within the hour: report the distribution
-  rather than a verdict, or retry the gate rather than the request
+  as a red gate. Decided: a timeout or a provider error is a *condition* and is
+  retried up to twice and counted; `no_call` is the model declining and is
+  never retried, because that is a result this gate exists to observe. New
+  assertion 10 fails the run when the conditions outnumbered the assertions,
+  so a green verdict cannot come from a run that spent itself waiting
+
+## 13. Gate G — the console chat, end to end
+
+Two suites covered most of this and neither covered the join. Gate F drives a
+real Gemini and stops at the selection; `chat.test.ts` drives the whole route
+and stops at a fake router. A real model's selection arriving at a real
+dispatch was untested, which is where a rename or a reordered parameter breaks
+silently: both suites stay green and the console answers the wrong question.
+
+`pnpm --filter @nymspace/api verify:console-chat`, evidence in
+`apps/api/evidence/gate-g.json`. The store is a fixture and everything above it
+is real — the HTTP request, the validator, the matcher, the router, Gemini, the
+dispatch, the lens.
+
+- [x] 13.1 The sentence from the deployed console returns `200`, `kind: "lens"`,
+  `routedBy: "model"`
+- [x] 13.2 A sentence the matcher knows still answers `routedBy: "matcher"`
+- [x] 13.3 "which of these handles invoices, and what is it allowed to write"
+  reaches `billing.nymspace.eth` — the model selected an agent from a
+  description, out of three, with no name in the question
+- [x] 13.4 "what has happened to research since it was set up" reaches the
+  audit trail
+- [x] 13.5 "move 0.0001 ether out of the one that handles invoices, to whoever
+  owns it" returns a plan naming `/v1/agents/agent-billing/payments/preview`
+  and `/payments`, and sends nothing
+- [x] 13.6 An off-topic question returns the unanswered state with a `200`
+- [x] 13.7 A model-routed answer is byte-identical to the matcher's answer for
+  the same intent, `readAt` and `routedBy` aside. This is the assertion that
+  makes "the model writes no part of an answer" checkable rather than stated:
+  the two come from the same function on the same reads, so anything differing
+  came from the model
+
+Both of 13's first drafts were wrong in a way worth recording, because both
+would have passed while proving nothing.
+
+- [x] 13.8 The payment case first read "send a tenth of an ether from the
+  research one to its owner", which names an agent and uses a matcher verb — so
+  the matcher answered it and the assertion never reached the router. It came
+  back `routedBy: "matcher"` and a lens
+- [x] 13.9 The prose case first searched the response bodies for first-person
+  text and failed on the console's own `unrecognised()` copy — "so I can only
+  answer about things I can go and check", a string in `chat.ts`. A heuristic
+  that cannot tell the application's voice from a model's was not measuring
+  what it was named after. 13.7 replaced it

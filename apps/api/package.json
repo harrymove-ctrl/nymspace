@@ -14,7 +14,8 @@
     "start": "tsx --env-file-if-exists=../../.env --conditions=react-server src/index.ts",
     "start:dist": "node --env-file-if-exists=../../.env dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify:console-chat": "tsx --env-file-if-exists=../../.env --conditions=react-server scripts/verify-console-chat.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.6",
