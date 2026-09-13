@@ -155,3 +155,39 @@ than in a commit message nobody will look for.
   conditions already baked in. The checker now reads the entrypoint and skips
   build output, so it still catches a forgotten flag without demanding a
   meaningless one
+
+## 12. Merging origin/main, and what it changed
+
+This branch was built on a stale local `main`. `origin/main` had moved 48
+commits ahead, and four of the five repairs in section 11 were already there —
+`git fetch` before concluding "main is broken" would have saved the work.
+
+- [x] 12.1 Merged `origin/main` (`d1fbf79`). Six conflicts: `chat.ts`,
+  `chat.test.ts`, `store/src/types.ts`, `connect-from-claude.tsx`,
+  `check-server-conditions.ts`, and the lockfile
+- [x] 12.2 Took upstream's version of the three files section 11 duplicated.
+  Upstream's `check-server-conditions.ts` is the better fix: it recognises a
+  build driver and a compiled entrypoint as shapes, and accepts a compiled one
+  only when the build that produced it resolves the condition — so deleting
+  `conditions: ["react-server"]` from `build.mjs` starts failing both scripts,
+  which the version in 11.6 would not have caught
+- [x] 12.3 `paymentPlan` now carries both sides: upstream's precondition, which
+  answers `unanswered` when an agent has no wallet or no policy rather than
+  offering a plan the deployment cannot keep, and this branch's `recipient`
+  argument, so the routing stage does not have to fabricate a sentence for the
+  function to re-parse
+- [x] 12.4 `chatApp` in `chat.test.ts` takes both new parameters. 15 tests pass
+  — this branch's twelve and upstream's three
+- [x] 12.5 Only one thing from section 11 survives the merge as new work: the
+  `next typegen` step in `apps/web`'s typecheck script
+- [x] 12.6 Re-verified after the merge: typecheck 9/9, lint clean,
+  `env:check` 58 variables, `conditions:check` 27 entrypoints, core 29, ens 73,
+  adk 24, api 8 of 10 files. Gate F 9/9 live
+
+- [ ] 12.7 Gate F is not deterministic, and the merge run proved it. The first
+  run after merging failed four assertions on the time budget — 5.7s, 10.0s,
+  10.0s — and the identical code passed 9/9 minutes later at 0.9-1.8s. That is
+  the provider's latency variance, already recorded in `model.ts`, showing up
+  as a red gate. Worth deciding what a gate should do about a dependency that
+  moves by an order of magnitude within the hour: report the distribution
+  rather than a verdict, or retry the gate rather than the request

@@ -189,33 +189,27 @@ export interface FinancialAuthorityRef {
  * identity proof. A single enum spanning all five could not say either thing.
  */
 /**
- * `retired` is an end state, not a failure.
+ * `retired` is deregistration, and it is not `failed`.
  *
- * An agent whose name has been given up is not a provisioning run that went
- * wrong, and collapsing the two would put every offboarded agent in the same
- * column as the ones that broke — on the fleet screen, which exists to show
- * which integration is incomplete.
+ * An agent whose identity was withdrawn on purpose and one whose provisioning
+ * broke are the same state only to a reader who stops at "not active" — and the
+ * second is the one somebody has to go and fix. `POST /:id/deregister` is the
+ * only writer.
  */
 export type EnsProvisioning =
   | "draft"
   | "pending"
   | "active"
-  | "retired"
-  | "failed";
+  | "failed"
+  | "retired";
 
-/**
- * `deregistered` is distinct from `unregistered` for the same reason.
- *
- * One says the registration was never made; the other says it was made and
- * then withdrawn. The registry can tell them apart and so must this, because
- * the second one has a transaction behind it and the first one does not.
- */
 export type Erc8004Provisioning =
   | "unregistered"
   | "pending"
   | "registered"
-  | "deregistered"
-  | "failed";
+  | "failed"
+  /** Registered once and withdrawn since — never the same as never registered. */
+  | "deregistered";
 
 export type GraphProvisioning =
   | "not_indexed"
@@ -267,6 +261,15 @@ export type ActivityType =
   | "ens.permission.revoked"
   | "ens.record.updated"
   | "ens.action.denied"
+  /*
+    The two writes that change who an agent is, rather than what it says.
+
+    Both are store-only today — deregistration withdraws the agent from the
+    fleet without burning the name, and a controller swap rewrites the address
+    the console reads. They are still ENS-source events: the resolver is the
+    contract they are about, and an operator auditing an agent's history needs
+    them in the same list as the writes that did touch chain.
+  */
   | "ens.agent.deregistered"
   | "ens.agent.controller_updated"
   | "erc8004.registered"
@@ -441,6 +444,31 @@ export interface ActivityFilter {
   type?: ActivityType;
   status?: ActivityStatus;
   limit?: number;
+}
+
+/**
+ * One source's events, counted by outcome.
+ *
+ * Every status is present, zero included, so a reader never has to decide
+ * whether a missing key means "none" or "not counted".
+ */
+export type ActivitySourceCounts = { source: ActivitySource; total: number } & Record<
+  ActivityStatus,
+  number
+>;
+
+/**
+ * The activity log counted by source and outcome, over every event.
+ *
+ * Over every event, not a page. The timeline loads the newest hundred, and a
+ * chart counted from those rows would undercount the moment the log passed a
+ * hundred and say nothing about it — the fabricated state `agent-console`
+ * forbids.
+ */
+export interface ActivitySummary {
+  /** Sources with at least one event, largest first. */
+  bySource: ActivitySourceCounts[];
+  total: number;
 }
 
 //////////////////////////////////////////////////////////////////////////////

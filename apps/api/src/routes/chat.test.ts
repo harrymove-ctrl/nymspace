@@ -52,6 +52,7 @@ function recordingEns(calls: string[]) {
 }
 
 /**
+/**
  * A router that answers with whatever the test decided, and records what it
  * was asked.
  *
@@ -69,7 +70,28 @@ function fakeRouter(routing: ChatRouting, seen: RouterRequest[] = []): ChatRoute
   };
 }
 
-function chatApp(calls: string[] = [], chatRouter?: ChatRouter) {
+/**
+ * The wallet reference the fixture's agent carries, matching its own
+ * `financial: "policy_configured"`. A payment plan is only offered when one
+ * exists, so a store that answered `undefined` here would describe an agent
+ * whose provisioning state and whose authority disagreed.
+ */
+const AUTHORITY = {
+  agentId: agent.id,
+  privyWalletId: "wallet-research",
+  walletAddress: ADDRESS,
+  policyId: "policy-research",
+  policyLabel: "research spend limit",
+};
+
+function chatApp(
+  calls: string[] = [],
+  // `null`, not `undefined`: an explicit `undefined` argument selects the
+  // default parameter, which would silently give the no-wallet test a wallet.
+  authority: (Omit<typeof AUTHORITY, "policyId"> & { policyId?: string }) | null =
+    AUTHORITY,
+  chatRouter?: ChatRouter,
+) {
   const deps = {
     chatRouter,
     store: {
@@ -77,6 +99,7 @@ function chatApp(calls: string[] = [], chatRouter?: ChatRouter) {
       getAgent: async (id: string) => (id === agent.id ? agent : undefined),
       // The audit suggestion reads the log; an empty one is a valid trail.
       listActivity: async () => [],
+      getFinancialAuthority: async () => authority ?? undefined,
     },
     ens: recordingEns(calls),
     config: { chainId: 11155111 },
@@ -88,8 +111,13 @@ function chatApp(calls: string[] = [], chatRouter?: ChatRouter) {
   return createApp({ port: 0, allowedOrigins: [] }, deps);
 }
 
-async function ask(message: string, calls: string[] = [], chatRouter?: ChatRouter) {
-  const res = await chatApp(calls, chatRouter).fetch(
+async function ask(
+  message: string,
+  calls: string[] = [],
+  chatRouter?: ChatRouter,
+  authority: Parameters<typeof chatApp>[1] = AUTHORITY,
+) {
+  const res = await chatApp(calls, authority, chatRouter).fetch(
     new Request("http://api.test/v1/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -146,6 +174,57 @@ describe("the questions it must not steal", () => {
     const answer = await ask("show research");
     expect(answer.kind).toBe("lens");
     expect(answer.title).toBe("research.nymspace.eth");
+  });
+});
+
+describe("the payment intent", () => {
+  it("offers the two-step plan when the agent holds a wallet under a policy", async () => {
+    const answer = await ask("pay 0.0001 ETH from research to research");
+
+    expect(answer.kind).toBe("plan");
+    expect(answer.steps.map((step: { path: string }) => step.path)).toEqual([
+      "/v1/agents/agent-research/payments/preview",
+      "/v1/agents/agent-research/payments",
+    ]);
+  });
+
+  /**
+   * The failure this pins: both steps 409 on the same missing reference, so an
+   * unprovisioned agent used to get a plan promising a policy check and a
+   * payment, then two identical red failures telling the operator to run a
+   * `pnpm` script they have no checkout for.
+   */
+  it("offers no plan at all when the agent has no wallet", async () => {
+    const res = await chatApp([], null).fetch(
+      new Request("http://api.test/v1/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "pay 0.0001 ETH from research to research" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const answer = await res.json();
+
+    expect(answer.kind).toBe("unanswered");
+    expect(answer.message).toContain("no wallet");
+    // Not a denial: there is no policy here to refuse anything.
+    expect(answer.message).not.toContain("denied");
+    // And no instruction the reader cannot act on.
+    expect(answer.message).not.toContain("pnpm");
+  });
+
+  it("offers no plan when the wallet carries no policy to be capped by", async () => {
+    const res = await chatApp([], { ...AUTHORITY, policyId: undefined }).fetch(
+      new Request("http://api.test/v1/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "pay 0.0001 ETH from research to research" }),
+      }),
+    );
+    const answer = await res.json();
+
+    expect(answer.kind).toBe("unanswered");
+    expect(answer.message).toContain("no spend policy");
   });
 });
 

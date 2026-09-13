@@ -30,26 +30,21 @@ export const baseUnitsSchema = z
   .string()
   .regex(/^\d+$/, "must be a decimal string in the token's base units");
 
+/**
+ * The body of `POST /:id/controller` — the one field that route changes.
+ *
+ * Its own schema rather than a reuse of {@link permissionGrantSchema}: that one
+ * carries a record key too, and a grant and a controller swap are different
+ * writes that happen to share a field name.
+ */
+export const controllerUpdateSchema = z.object({
+  controller: addressSchema,
+});
+
 export const permissionGrantSchema = z.object({
   controller: addressSchema,
   recordKey: z.string().min(1),
   grant: z.boolean(),
-});
-
-/**
- * Who the agent's controller becomes.
- *
- * One field, and it is an address rather than a name: the controller is the
- * account the resolver checks roles for, and a name would have to be resolved
- * to an address before it meant anything — by this route, at which point the
- * route is deciding which account holds an agent's authority from a string.
- *
- * The grant itself is not touched here. Moving the controller in the store and
- * moving the role on chain are different acts by different authorities, and
- * `POST /:id/permissions` is the one that does the second.
- */
-export const controllerUpdateSchema = z.object({
-  controller: addressSchema,
 });
 
 /**
@@ -174,9 +169,21 @@ export function unknownToken(requested: string, configured: string | null): neve
   });
 }
 
+/**
+ * The agent has no `financial_authority` reference, so nothing signs for it.
+ *
+ * The message states the fact and stops. It used to end in "Run
+ * `pnpm provision:wallet`", which is a repository command reaching a console
+ * over HTTP: the operator reading it is looking at a deployed web app, has no
+ * checkout and no database URL, and the one place that instruction is
+ * actionable — a developer's terminal — is the one place this message does not
+ * appear. Provisioning is `docs/22`'s runbook; a 409 body is not a runbook.
+ */
 export function walletNotProvisioned(id: string): never {
   throw new HTTPException(409, {
-    message: `agent ${id} has no wallet. Run \`pnpm provision:wallet\`.`,
+    message:
+      `agent ${id} has no wallet. Wallet provisioning has not run against this deployment, so there ` +
+      `is no signer and no spend policy — nothing to preview an amount against and nothing to send it with.`,
   });
 }
 

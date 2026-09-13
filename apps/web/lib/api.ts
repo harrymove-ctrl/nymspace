@@ -1,5 +1,5 @@
 import type { AppType } from "@nymspace/api/app";
-import { hc } from "hono/client";
+import { hc, type InferRequestType } from "hono/client";
 
 /**
  * The typed client for `@nymspace/api`.
@@ -28,7 +28,52 @@ import { hc } from "hono/client";
 export const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3112";
 
-export const api = hc<AppType>(apiBaseUrl);
+/**
+ * Writes go to this app; reads go straight to the API.
+ *
+ * Every route that spends the organization's money needs a bearer token now
+ * (`apps/api/src/write-gate.ts`), and the browser must not hold one — a
+ * credential in client JavaScript is a credential in view source. So a `POST`
+ * is rewritten to `/api/gateway/<path>` on this origin, where a route handler
+ * adds the token server-side and forwards it.
+ *
+ * `hc` keeps its `AppType`, so the call sites below are still typed against the
+ * API's own routes and a renamed route is still a compile error. Only the
+ * transport moved.
+ *
+ * Reads are left alone on purpose. They answer anyone by design — the product's
+ * argument is that its claims are checkable — and sending them through this app
+ * would add a hop that proves nothing and hides which origin actually served
+ * the data.
+ *
+ * Server-side callers skip the rewrite: `window` is undefined there, the token
+ * is already in the environment, and a server component calling its own route
+ * handler over HTTP would be a request to itself for no reason.
+ *
+ * Exported because `hc` is not the only caller. The chat console runs a plan by
+ * fetching the exact paths the plan names — it cannot use the typed client,
+ * since the whole point of a plan is that the path came from the API at runtime
+ * rather than from a route literal at compile time. That hand-built fetch went
+ * straight to the API and started failing with 401 the moment writes were
+ * gated, which is how this ended up exported rather than private: the rule
+ * about where a write goes belongs in one place, and anything that sends one
+ * has to be able to reach it.
+ */
+export function gatewayFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const inBrowser = typeof window !== "undefined";
+
+  if (method !== "POST" || !inBrowser) return fetch(input, init);
+
+  const url = new URL(typeof input === "string" ? input : input.toString());
+  const proxied = new URL(
+    `/api/gateway${url.pathname}${url.search}`,
+    window.location.origin,
+  );
+  return fetch(proxied, init);
+}
+
+export const api = hc<AppType>(apiBaseUrl, { fetch: gatewayFetch });
 
 /**
  * Every call checks `res.ok` inline rather than through a shared unwrap helper.
@@ -226,15 +271,57 @@ export async function discover(body: {
   return res.json();
 }
 
+/**
+ * The activity route's filter, as the API's own schema declares it.
+ *
+ * Derived rather than restated. The hand-written union this replaced had
+ * already drifted — it omitted `mcp`, which the API accepts — and a restated
+ * union drifts silently, where a derived one fails typecheck.
+ */
+type ActivityQuery = InferRequestType<typeof api.v1.activity.$get>["query"];
+
+export type ActivitySourceFilter = NonNullable<ActivityQuery["source"]>;
+export type ActivityStatusFilter = NonNullable<ActivityQuery["status"]>;
+
+/**
+ * A list that must name every member of `T`.
+ *
+ * A missing member makes the argument require a `missing` property naming it,
+ * so the next source the API accepts fails typecheck here instead of being
+ * silently unreachable from the console's filter controls.
+ */
+const everyOf =
+  <T extends string>() =>
+  <const L extends readonly T[]>(
+    list: L & ([Exclude<T, L[number]>] extends [never] ? unknown : { missing: Exclude<T, L[number]> }),
+  ): L =>
+    list;
+
+/**
+ * The values a URL may filter the timeline by. Here rather than beside the
+ * chart: exports of a `"use client"` module reach a server component as client
+ * references, not values, and the page validates `searchParams` against these.
+ */
+export const ACTIVITY_SOURCES = everyOf<ActivitySourceFilter>()([
+  "ens",
+  "erc8004",
+  "graph",
+  "privy",
+  "app",
+  "mcp",
+]);
+
+/** In stacking order: what went through, then what was stopped. */
+export const ACTIVITY_STATUSES = everyOf<ActivityStatusFilter>()([
+  "success",
+  "denied",
+  "failed",
+  "pending",
+]);
+
 /** The activity timeline, filterable by agent, source, type and status. */
 export async function fetchActivity(
-  filter: {
-    agent?: string;
-    source?: "ens" | "erc8004" | "graph" | "privy" | "app";
-    type?: string;
-    status?: "pending" | "success" | "denied" | "failed";
-    limit?: number;
-  } = {},
+  filter: Omit<ActivityQuery, "limit"> & { limit?: number } = {},
 ) {
   const res = await api.v1.activity.$get({
     query: {
@@ -244,6 +331,16 @@ export async function fetchActivity(
       limit: filter.limit === undefined ? undefined : String(filter.limit),
     },
   });
+  if (!res.ok) throw requestFailed(res.status);
+  return res.json();
+}
+
+/**
+ * The whole log counted by source and outcome — never a page of it. The
+ * timeline's rows are capped, and counting them would undercount in silence.
+ */
+export async function fetchActivitySummary() {
+  const res = await api.v1.activity.summary.$get();
   if (!res.ok) throw requestFailed(res.status);
   return res.json();
 }

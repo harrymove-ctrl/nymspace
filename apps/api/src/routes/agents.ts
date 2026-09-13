@@ -250,6 +250,13 @@ export const agents = new Hono<DepsEnv>()
       .map((event) => ({
         what: event.summary,
         status: event.status,
+        // The type and the record key are what let a screen say which planned
+        // write a row *is*, rather than matching the sentence it renders.
+        // Without them the create screen can only count rows, and a run that
+        // skipped a step it found already on chain shifts every later row by
+        // one — so the step in flight is reported as a different step.
+        type: event.type,
+        key: keyOf(event.metadata),
         // Narrowed rather than asserted: `ActivityEvidence` is a union per
         // source, and a provisioning step's evidence is always an ENS one.
         txHash: event.evidence.source === "ens" ? event.evidence.txHash : null,
@@ -1097,6 +1104,13 @@ const PROVISIONING_TYPES: ReadonlySet<string> = new Set([
 function phaseOf(metadata: unknown): string | null {
   if (!metadata || typeof metadata !== "object") return null;
   const value = (metadata as Record<string, unknown>)["phase"];
+  return typeof value === "string" ? value : null;
+}
+
+/** The record key a record write or a grant landed on, when it had one. */
+function keyOf(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>)["key"];
   return typeof value === "string" ? value : null;
 }
 

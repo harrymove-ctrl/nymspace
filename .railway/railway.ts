@@ -94,7 +94,40 @@ const secrets = {
   PRIVY_AUTHORIZATION_KEY_ID: preserve(),
   PRIVY_AUTHORIZATION_PRIVATE_KEY: preserve(),
   PRIVY_POLICY_ID: preserve(),
+  PRIVY_AGENT_SIGNER_ID: preserve(),
+
+  /*
+    The owner key, and the escalation path that exists only when it is set.
+
+    `deps.ts` builds `privyOwner` from these and the payment route renders an
+    escalation affordance only when it did — `docs/08` forbids simulating an
+    approval path, and design.md D6 makes the absence of the button the honest
+    rendering of an absent higher authority. So leaving them unset is a
+    supported arrangement, not a broken one.
+
+    Declared anyway. `preserve()` writes no value; it says the slot exists and
+    that Railway owns what goes in it. Undeclared, the difference between
+    "this deployment has no owner key" and "someone forgot the file" is not
+    recorded anywhere.
+  */
+  PRIVY_OWNER_KEY_ID: preserve(),
+  PRIVY_OWNER_PRIVATE_KEY: preserve(),
+  PRIVY_OWNER_POLICY_ID: preserve(),
+
+  /*
+    Gates `/v1/mcp/console`, which creates agents and spends gas.
+
+    `preserve()` rather than a literal for the obvious reason, and declared at
+    all for the less obvious one: unset, the endpoint reports itself
+    unconfigured, which is a supported arrangement. Undeclared, "this
+    deployment has no console MCP" and "somebody left it out of the file" look
+    identical — and only one of those is a decision.
+  */
+  CONSOLE_MCP_TOKEN: preserve(),
+
   GITHUB_TOKEN: preserve(),
+  /** The `gh` CLI's spelling of the same token; `@nymspace/github` reads either. */
+  GH_TOKEN: preserve(),
 } as const;
 
 /**
@@ -105,7 +138,19 @@ const demo = {
   DEMO_ALLOWED_PAYMENT_AMOUNT: "100000000000000",
   DEMO_DENIED_PAYMENT_AMOUNT: "10000000000000000",
   /** Native ETH on Base Sepolia — deliberately empty, no token faucet. */
+  /*
+    Empty, which selects the native-ETH arrangement.
+
+    The symbol and decimals travel with the address and are meaningless without
+    it — `demoToken()` returns null on an empty address and every amount is then
+    wei. They are here as empty literals rather than omitted so that configuring
+    this deployment for a token is one diff that sets three adjacent values,
+    rather than one that sets the address and leaves the other two to be
+    discovered missing when an amount renders twelve orders of magnitude wrong.
+  */
   DEMO_PAYMENT_TOKEN_ADDRESS: "",
+  DEMO_PAYMENT_TOKEN_SYMBOL: "",
+  DEMO_PAYMENT_TOKEN_DECIMALS: "",
 } as const;
 
 /** The commit feed on the landing page. The token only lifts the rate limit. */
@@ -200,6 +245,20 @@ export default defineRailway(() => {
       NEXT_PUBLIC_SEPOLIA_RPC_URL: preserve(),
       NEXT_PUBLIC_PRIVY_APP_ID: preserve(),
       NEXT_PUBLIC_API_URL: "https://${{api.RAILWAY_PUBLIC_DOMAIN}}",
+
+      /*
+        The write token, on the web service as well as the api.
+
+        Deliberately not `NEXT_PUBLIC_`: Next inlines those into the client
+        bundle, and a credential in the bundle is a credential in view source.
+        This one is read only inside `app/api/gateway/[...path]/route.ts`, which
+        runs on the server and adds it to writes on their way to the API — the
+        browser never sees it and never needs to.
+
+        The same value as the api's, because it authorizes the same capability.
+        Two tokens would be two things to rotate and one of them forgotten.
+      */
+      CONSOLE_MCP_TOKEN: preserve(),
       /**
        * Read at request time by the agent page, never inlined into the client.
        * The permission proof writes the MCP endpoint derived from the same
