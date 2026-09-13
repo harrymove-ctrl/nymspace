@@ -30,6 +30,17 @@ export const baseUnitsSchema = z
   .string()
   .regex(/^\d+$/, "must be a decimal string in the token's base units");
 
+/**
+ * The body of `POST /:id/controller` — the one field that route changes.
+ *
+ * Its own schema rather than a reuse of {@link permissionGrantSchema}: that one
+ * carries a record key too, and a grant and a controller swap are different
+ * writes that happen to share a field name.
+ */
+export const controllerUpdateSchema = z.object({
+  controller: addressSchema,
+});
+
 export const permissionGrantSchema = z.object({
   controller: addressSchema,
   recordKey: z.string().min(1),

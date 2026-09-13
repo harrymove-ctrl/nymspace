@@ -188,13 +188,28 @@ export interface FinancialAuthorityRef {
  * an agent whose Graph indexing is pending is still fully usable for every
  * identity proof. A single enum spanning all five could not say either thing.
  */
-export type EnsProvisioning = "draft" | "pending" | "active" | "failed";
+/**
+ * `retired` is deregistration, and it is not `failed`.
+ *
+ * An agent whose identity was withdrawn on purpose and one whose provisioning
+ * broke are the same state only to a reader who stops at "not active" — and the
+ * second is the one somebody has to go and fix. `POST /:id/deregister` is the
+ * only writer.
+ */
+export type EnsProvisioning =
+  | "draft"
+  | "pending"
+  | "active"
+  | "failed"
+  | "retired";
 
 export type Erc8004Provisioning =
   | "unregistered"
   | "pending"
   | "registered"
-  | "failed";
+  | "failed"
+  /** Registered once and withdrawn since — never the same as never registered. */
+  | "deregistered";
 
 export type GraphProvisioning =
   | "not_indexed"
@@ -246,6 +261,17 @@ export type ActivityType =
   | "ens.permission.revoked"
   | "ens.record.updated"
   | "ens.action.denied"
+  /*
+    The two writes that change who an agent is, rather than what it says.
+
+    Both are store-only today — deregistration withdraws the agent from the
+    fleet without burning the name, and a controller swap rewrites the address
+    the console reads. They are still ENS-source events: the resolver is the
+    contract they are about, and an operator auditing an agent's history needs
+    them in the same list as the writes that did touch chain.
+  */
+  | "ens.agent.deregistered"
+  | "ens.agent.controller_updated"
   | "erc8004.registered"
   | "ensip25.verified"
   | "ensip25.failed"

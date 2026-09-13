@@ -39,12 +39,17 @@ const TRACK_LABELS: Record<
     pending: { text: "registering", tone: "warn" },
     active: { text: "ENS active", tone: "good" },
     failed: { text: "ENS failed", tone: "bad" },
+    // `neutral`, not `bad`. A retired agent is the outcome somebody asked for,
+    // and painting it red would send an operator to fix what was done on
+    // purpose — the same argument `docs/03` makes about denials.
+    retired: { text: "retired", tone: "neutral" },
   },
   erc8004: {
     unregistered: { text: "no registration", tone: "neutral" },
     pending: { text: "registering", tone: "warn" },
     registered: { text: "registered", tone: "good" },
     failed: { text: "registration failed", tone: "bad" },
+    deregistered: { text: "deregistered", tone: "neutral" },
   },
   ensip25: {
     unchecked: { text: "not checked", tone: "neutral" },
