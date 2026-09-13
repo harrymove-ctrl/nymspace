@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ConsolePreloader } from "@/components/reality-split/console-preloader";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -70,6 +71,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           disableTransitionOnChange
         >
           {children}
+          {/*
+            Mounted by the layout rather than by the landing page, because the
+            overlay has to outlive the navigation it covers: rendered from the
+            page it would unmount the moment the router left `/`. It renders
+            nothing until the Console link fires its event.
+          */}
+          <ConsolePreloader />
         </ThemeProvider>
       </body>
     </html>
