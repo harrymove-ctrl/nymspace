@@ -441,7 +441,7 @@ export default async function AgentPage({
       {/* ── Permission proof ───────────────────────────────────────────── */}
       <Frame
         title="Permission proof"
-        subtitle="Two writes from the same controller key, seconds apart. One it was granted, one it never was."
+        subtitle="Two writes from the same controller key, seconds apart. It may change where this agent can be reached; it may not change what this agent is registered as."
       >
         <PermissionProof
           agentId={id}
