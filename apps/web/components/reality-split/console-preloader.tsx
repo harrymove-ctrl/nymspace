@@ -32,17 +32,28 @@ import { RealitySplit } from "./engine";
  * commits, and a canvas context that was never granted.
  */
 
-/** Someone who clicked is already waiting; the piece plays a little quick. */
-const SPEED = 1.75;
+/**
+ * Someone who clicked is already waiting, so the piece plays quicker than the
+ * reference — but not as quick as it first shipped.
+ *
+ * The number that matters is not the total, it is the inspection: seven
+ * letters share the 2.2s between the dive landing and the pop, which is ~310ms
+ * each at the measured speed. At 1.75 that was 180ms, and a letter that
+ * arrives on a damped spring needs long enough to visibly settle or the spring
+ * is wasted — the whole passage read as a flick rather than as something being
+ * looked at. 1.35 gives each letter ~230ms and the pass ~4.4s.
+ */
+const SPEED = 1.35;
 
 const FADE_MS = 380;
 
 /**
  * The exit of last resort, derived rather than typed.
  *
- * A full pass to the pop is ~5.9s of choreography, so at `SPEED` it is ~3.4s;
+ * A full pass to the pop is ~5.9s of choreography, so at `SPEED` it is ~4.4s;
  * this has to outlast that plus the router, and writing it as a flat number
- * meant that slowing the piece down once yanked the overlay mid-inspection.
+ * meant that slowing the piece down once yanked the overlay mid-inspection —
+ * which is exactly what changing `SPEED` would have done had it stayed one.
  */
 const HARD_STOP_MS = (5.95 / SPEED) * 1000 + 1400;
 
