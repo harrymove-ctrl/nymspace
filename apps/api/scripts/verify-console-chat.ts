@@ -124,11 +124,22 @@ async function main(): Promise<void> {
     return;
   }
 
+  /**
+   * The log is kept, not discarded.
+   *
+   * The route renders a model decline and a provider timeout identically —
+   * deliberately, because to an operator they are the same fact — which makes
+   * the response body unable to tell assertion 6 what it needs to know. The
+   * log already carries the distinction as `miss=no_call` against
+   * `miss=timeout`, so the gate reads it there rather than asserting on a
+   * shape that two different things produce.
+   */
+  const logLines: string[] = [];
+
   const app = createApp(
     { port: 0, allowedOrigins: [] },
     fixtureDeps(createAdkRouter({ apiKey })),
-    // The gate's own output is the record; the request log would bury it.
-    () => undefined,
+    (line) => logLines.push(line),
   );
 
   const runs: Record<string, unknown>[] = [];
@@ -163,6 +174,9 @@ async function main(): Promise<void> {
   ) => {
     for (let attempt = 0; ; attempt += 1) {
       await spacing();
+      // Requests are sequential, so everything logged after this mark belongs
+      // to this one.
+      const from = logLines.length;
       const response = await app.fetch(
         new Request("http://api.test/v1/chat", {
           method: "POST",
@@ -172,14 +186,15 @@ async function main(): Promise<void> {
       );
       const status = response.status;
       const body = (await response.json()) as Record<string, unknown>;
-      runs.push({ label, message, status, body });
+      const lines = logLines.slice(from);
+      runs.push({ label, message, status, body, lines });
 
       const slow =
         expect === "placed" &&
         body["kind"] === "unanswered" &&
         body["routedBy"] === "matcher" &&
         attempt < 2;
-      if (!slow) return { status, body };
+      if (!slow) return { status, body, lines };
       providerRetries += 1;
     }
   };
@@ -249,13 +264,23 @@ async function main(): Promise<void> {
     "what is the weather in Hanoi tomorrow",
     "declined",
   );
+  const declined = offTopic.lines.some((line) => line.includes('"miss":"no_call"'));
+
   assert(
     6,
-    "a question this console cannot answer returns the unanswered state with a 200",
+    "the model declines a question this console cannot answer, and the route returns a 200",
+    /**
+     * `no_call` specifically. Without reading the log this assertion passed on
+     * a timeout as readily as on a decline, because the route renders both as
+     * the unanswered state — so in one of this provider's slow windows it
+     * would have recorded "the model refused to force a tool" for a run where
+     * the model was never reached.
+     */
     offTopic.status === 200 &&
       offTopic.body["kind"] === "unanswered" &&
-      Array.isArray(offTopic.body["suggestions"]),
-    `${offTopic.status} ${String(offTopic.body["kind"])}`,
+      Array.isArray(offTopic.body["suggestions"]) &&
+      declined,
+    `${offTopic.status} ${String(offTopic.body["kind"])}, miss=${declined ? "no_call" : "not a decline"}`,
   );
 
   /**

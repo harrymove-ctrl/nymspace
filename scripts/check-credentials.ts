@@ -425,16 +425,40 @@ async function checkGemini(): Promise<void> {
   }
 
   try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models",
-      { headers: { "x-goog-api-key": key } },
-    );
-    const body = (await response.json().catch(() => ({}))) as {
+    /**
+     * Every page, not the first one.
+     *
+     * The endpoint answers with fifty models and a `nextPageToken`, and the
+     * visibility assertions below are membership tests — so a single page
+     * makes them a test of whether a pinned model happens to sort into the
+     * first fifty. Both pins do today; Google adds models continually, and the
+     * day one falls past the fiftieth entry this gate would fail Gate 0 for a
+     * model that answers every request. Pagination is bounded so a paging bug
+     * upstream cannot spin here forever.
+     */
+    const base = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200";
+    const models: unknown[] = [];
+    let response = await fetch(base, { headers: { "x-goog-api-key": key } });
+    let body = (await response.json().catch(() => ({}))) as {
       models?: unknown[];
+      nextPageToken?: string;
       error?: { message?: string };
     };
+    const first = { response, body };
 
-    const models = Array.isArray(body.models) ? body.models : [];
+    for (let page = 0; page < 10; page += 1) {
+      if (!response.ok || !Array.isArray(body.models)) break;
+      models.push(...body.models);
+      if (!body.nextPageToken) break;
+
+      response = await fetch(`${base}&pageToken=${encodeURIComponent(body.nextPageToken)}`, {
+        headers: { "x-goog-api-key": key },
+      });
+      body = (await response.json().catch(() => ({}))) as typeof body;
+    }
+
+    response = first.response;
+    body = first.body;
 
     record({
       provider: "gemini",

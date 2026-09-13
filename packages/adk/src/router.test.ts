@@ -256,4 +256,22 @@ describe("the retry", () => {
     expect(routing).toMatchObject({ kind: "miss", reason: "no_call" });
     expect(calls).toBe(1);
   });
+
+  it("asks once when the caller turned the retry off", async () => {
+    let calls = 0;
+    const llm = llmThat(async function* () {
+      calls += 1;
+      yield turn([{ text: "" }]);
+    });
+
+    // `measure-routing.ts` depends on this: one call is one attempt, or the
+    // numbers it pins a model on are measuring a retry it did not ask for.
+    const routing = await createAdkRouter({ llm, timeoutMs: 5_000, retry: false }).route({
+      message: "anything at all",
+      fleet,
+    });
+
+    expect(routing).toMatchObject({ kind: "miss", reason: "no_call" });
+    expect(calls).toBe(1);
+  });
 });

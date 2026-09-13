@@ -118,7 +118,22 @@ async function main(): Promise<void> {
   const rows: Row[] = [];
 
   for (const model of CANDIDATES) {
-    const router = createAdkRouter({ apiKey, model, timeoutMs: MEASURE_TIMEOUT_MS });
+    /**
+     * `retry: false`, or this script measures its own subject twice.
+     *
+     * `route()` spends a second attempt on an empty turn, so without this the
+     * per-model rows below would report placements that already included a
+     * retry, latencies that already included a second round trip, and the
+     * section further down would be measuring a third attempt. The table in
+     * `model.ts` was recorded before that retry existed; this keeps the two
+     * comparable.
+     */
+    const router = createAdkRouter({
+      apiKey,
+      model,
+      timeoutMs: MEASURE_TIMEOUT_MS,
+      retry: false,
+    });
     const row: Row = {
       model,
       correct: 0,
@@ -172,6 +187,8 @@ async function main(): Promise<void> {
     apiKey,
     model: ROUTING_MODEL,
     timeoutMs: MEASURE_TIMEOUT_MS,
+    // Single attempts, so the retry this section measures is the one it makes.
+    retry: false,
   });
   const retry = {
     model: ROUTING_MODEL,

@@ -141,6 +141,18 @@ const USER_ID = "console";
 
 export type AdkRouterConfig = {
   timeoutMs?: number;
+  /**
+   * Whether an empty turn gets a second ask. On by default; see {@link route}.
+   *
+   * It exists to be turned *off*, by `measure-routing.ts`. That script's whole
+   * premise is that one call is one attempt — it counts first-try placements
+   * and then retries the misses itself — and once the retry moved in here,
+   * every call it made was already spending a second attempt. The numbers it
+   * produced then measured a retry on top of a retry while the comments
+   * claimed otherwise, and those numbers are what decide which model is
+   * pinned.
+   */
+  retry?: boolean;
 } & (
   | {
       /**
@@ -369,6 +381,7 @@ export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
       const total = () => Date.now() - started;
 
       const first = await attempt(message, fleet, timeoutMs);
+      if (config.retry === false) return first;
 
       /**
        * One retry, and only on an empty turn.

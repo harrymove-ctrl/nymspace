@@ -1,12 +1,12 @@
 {
-  "ranAt": "2026-09-13T08:18:38.008Z",
+  "ranAt": "2026-09-13T08:29:23.021Z",
   "gate": "G",
   "go": true,
   "facts": {
     "model": "gemini-3.5-flash-lite",
     "fleetSize": 3,
-    "providerRetries": 0,
-    "questions": 7
+    "providerRetries": 1,
+    "questions": 8
   },
   "assertions": [
     {
@@ -41,9 +41,9 @@
     },
     {
       "n": 6,
-      "name": "a question this console cannot answer returns the unanswered state with a 200",
+      "name": "the model declines a question this console cannot answer, and the route returns a 200",
       "passed": true,
-      "detail": "200 unanswered"
+      "detail": "200 unanswered, miss=no_call"
     },
     {
       "n": 7,
@@ -53,6 +53,32 @@
     }
   ],
   "runs": [
+    {
+      "label": "unmatched",
+      "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
+      "status": 200,
+      "body": {
+        "kind": "unanswered",
+        "message": "I did not recognise an agent or a topic in that. I answer from live ENS, ERC 8004 and permission reads, so I can only answer about things I can go and check.",
+        "suggestions": [
+          "show me the fleet",
+          "show research",
+          "create a support agent",
+          "let research update its agent-context",
+          "as research, set agent-context to \"Specialized in ENS research\"",
+          "as research, set its mcp endpoint to https://example.com/mcp",
+          "what does research's mcp serve",
+          "pay 0.0001 ETH from research to research",
+          "show the audit trail for research"
+        ],
+        "routedBy": "matcher"
+      },
+      "lines": [
+        "{\"level\":\"info\",\"message\":\"chat unrouted\",\"requestId\":\"7c86ccbd-7adf-429e-8e19-7a38f1d6c798\",\"stage\":\"model\",\"miss\":\"no_call\",\"modelMs\":2266}",
+        "{\"level\":\"info\",\"message\":\"chat answered\",\"requestId\":\"7c86ccbd-7adf-429e-8e19-7a38f1d6c798\",\"stage\":\"none\",\"answer\":\"unanswered\"}",
+        "{\"level\":\"info\",\"message\":\"POST /v1/chat 200\",\"requestId\":\"7c86ccbd-7adf-429e-8e19-7a38f1d6c798\",\"method\":\"POST\",\"path\":\"/v1/chat\",\"status\":200,\"durationMs\":2268}"
+      ]
+    },
     {
       "label": "unmatched",
       "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
@@ -203,9 +229,13 @@
             "provenance": "STORE"
           }
         ],
-        "readAt": "2026-09-13T08:18:25.835Z",
+        "readAt": "2026-09-13T08:29:10.970Z",
         "routedBy": "model"
-      }
+      },
+      "lines": [
+        "{\"level\":\"info\",\"message\":\"chat answered\",\"requestId\":\"df8b340a-d6c4-40db-a355-f685566cfe29\",\"stage\":\"model\",\"tool\":\"show_fleet\",\"modelMs\":863,\"answer\":\"lens\"}",
+        "{\"level\":\"info\",\"message\":\"POST /v1/chat 200\",\"requestId\":\"df8b340a-d6c4-40db-a355-f685566cfe29\",\"method\":\"POST\",\"path\":\"/v1/chat\",\"status\":200,\"durationMs\":865}"
+      ]
     },
     {
       "label": "matched",
@@ -324,7 +354,7 @@
             "tone": "denied"
           }
         ],
-        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:18:27.340Z.",
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:29:12.474Z.",
         "detail": [
           {
             "label": "Owner",
@@ -372,9 +402,13 @@
             "provenance": "CHAIN 11155111"
           }
         ],
-        "readAt": "2026-09-13T08:18:27.340Z",
+        "readAt": "2026-09-13T08:29:12.474Z",
         "routedBy": "matcher"
-      }
+      },
+      "lines": [
+        "{\"level\":\"info\",\"message\":\"chat answered\",\"requestId\":\"6dedb0bf-bef4-4cee-aef5-7a59bbc532bc\",\"stage\":\"matcher\",\"answer\":\"lens\"}",
+        "{\"level\":\"info\",\"message\":\"POST /v1/chat 200\",\"requestId\":\"6dedb0bf-bef4-4cee-aef5-7a59bbc532bc\",\"method\":\"POST\",\"path\":\"/v1/chat\",\"status\":200,\"durationMs\":2}"
+      ]
     },
     {
       "label": "one-agent",
@@ -493,7 +527,7 @@
             "tone": "denied"
           }
         ],
-        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:18:29.603Z.",
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:29:14.715Z.",
         "detail": [
           {
             "label": "Owner",
@@ -541,9 +575,13 @@
             "provenance": "CHAIN 11155111"
           }
         ],
-        "readAt": "2026-09-13T08:18:29.603Z",
+        "readAt": "2026-09-13T08:29:14.715Z",
         "routedBy": "model"
-      }
+      },
+      "lines": [
+        "{\"level\":\"info\",\"message\":\"chat answered\",\"requestId\":\"8aec73f5-d93c-4c7f-b6b0-00d66e3d105a\",\"stage\":\"model\",\"tool\":\"show_agent\",\"modelMs\":739,\"answer\":\"lens\"}",
+        "{\"level\":\"info\",\"message\":\"POST /v1/chat 200\",\"requestId\":\"8aec73f5-d93c-4c7f-b6b0-00d66e3d105a\",\"method\":\"POST\",\"path\":\"/v1/chat\",\"status\":200,\"durationMs\":739}"
+      ]
     },
     {
       "label": "history",
@@ -662,7 +700,7 @@
             "tone": "denied"
           }
         ],
-        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:18:31.105Z.",
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:29:16.218Z.",
         "detail": [
           {
             "label": "Owner",
@@ -710,9 +748,13 @@
             "provenance": "CHAIN 11155111"
           }
         ],
-        "readAt": "2026-09-13T08:18:31.105Z",
+        "readAt": "2026-09-13T08:29:16.218Z",
         "routedBy": "matcher"
-      }
+      },
+      "lines": [
+        "{\"level\":\"info\",\"message\":\"chat answered\",\"requestId\":\"a136ed9c-ce1e-4392-b2d8-88f93da7a1c3\",\"stage\":\"matcher\",\"answer\":\"lens\"}",
+        "{\"level\":\"info\",\"message\":\"POST /v1/chat 200\",\"requestId\":\"a136ed9c-ce1e-4392-b2d8-88f93da7a1c3\",\"method\":\"POST\",\"path\":\"/v1/chat\",\"status\":200,\"durationMs\":1}"
+      ]
     },
     {
       "label": "pay",
@@ -747,7 +789,11 @@
         ],
         "closing": "The preview and the outcome are separate evidence: one is the policy, the other is what the signer did with it.",
         "routedBy": "model"
-      }
+      },
+      "lines": [
+        "{\"level\":\"info\",\"message\":\"chat answered\",\"requestId\":\"76ebf2ae-804a-45a8-9f80-ae0bb930e3a9\",\"stage\":\"model\",\"tool\":\"plan_payment\",\"modelMs\":911,\"answer\":\"plan\"}",
+        "{\"level\":\"info\",\"message\":\"POST /v1/chat 200\",\"requestId\":\"76ebf2ae-804a-45a8-9f80-ae0bb930e3a9\",\"method\":\"POST\",\"path\":\"/v1/chat\",\"status\":200,\"durationMs\":913}"
+      ]
     },
     {
       "label": "off-topic",
@@ -768,7 +814,12 @@
           "show the audit trail for research"
         ],
         "routedBy": "matcher"
-      }
+      },
+      "lines": [
+        "{\"level\":\"info\",\"message\":\"chat unrouted\",\"requestId\":\"1de1edea-2bd0-41b3-b52b-02087ff115f9\",\"stage\":\"model\",\"miss\":\"no_call\",\"modelMs\":1382}",
+        "{\"level\":\"info\",\"message\":\"chat answered\",\"requestId\":\"1de1edea-2bd0-41b3-b52b-02087ff115f9\",\"stage\":\"none\",\"answer\":\"unanswered\"}",
+        "{\"level\":\"info\",\"message\":\"POST /v1/chat 200\",\"requestId\":\"1de1edea-2bd0-41b3-b52b-02087ff115f9\",\"method\":\"POST\",\"path\":\"/v1/chat\",\"status\":200,\"durationMs\":1384}"
+      ]
     },
     {
       "label": "fleet-matched",
@@ -920,9 +971,13 @@
             "provenance": "STORE"
           }
         ],
-        "readAt": "2026-09-13T08:18:38.007Z",
+        "readAt": "2026-09-13T08:29:23.021Z",
         "routedBy": "matcher"
-      }
+      },
+      "lines": [
+        "{\"level\":\"info\",\"message\":\"chat answered\",\"requestId\":\"4ca27821-c5fe-45d4-988f-7172dc964852\",\"stage\":\"matcher\",\"answer\":\"lens\"}",
+        "{\"level\":\"info\",\"message\":\"POST /v1/chat 200\",\"requestId\":\"4ca27821-c5fe-45d4-988f-7172dc964852\",\"method\":\"POST\",\"path\":\"/v1/chat\",\"status\":200,\"durationMs\":0}"
+      ]
     }
   ]
 }

@@ -146,6 +146,41 @@ let privyOwnerClient: PrivyClient | undefined;
 let paymentToken: TokenSpec | null | undefined;
 let chatRouter: ChatRouter | null | undefined;
 
+/**
+ * The chat's routing stage, or nothing, and never a half-built one.
+ *
+ * No key is a product state: the chat behaves exactly as it did before the
+ * stage existed, and `null` records "asked, and there is none" so a keyless
+ * deployment does not re-read the environment on every unmatched message.
+ *
+ * A key the provider client refuses is not a product state, and this is the
+ * reason the construction moved out of a lazy getter. In a getter the throw
+ * arrived inside a request — a 500 on a route whose contract is a 200 — and
+ * because the failed attempt left the cache `undefined`, it was reconstructed
+ * and rethrown on every request after it, forever. Now
+ * {@link assertChatRouterConfigured} runs it once before the socket opens, so
+ * a deployment with a malformed key fails where a misconfiguration should:
+ * loudly, at startup, before it can serve a single quietly-degraded answer.
+ */
+function buildChatRouter(): ChatRouter | undefined {
+  if (chatRouter === undefined) {
+    const apiKey = process.env["GEMINI_API_KEY"];
+    chatRouter = apiKey ? createAdkRouter({ apiKey }) : null;
+  }
+  return chatRouter ?? undefined;
+}
+
+/**
+ * Startup validation for the routing credential — `docs/19`'s rule, applied to
+ * the one credential that is optional to have and fatal to have wrong.
+ *
+ * Called by `index.ts` before `serve()`. It builds the router, which is cached,
+ * so the first request does not pay for it twice.
+ */
+export function assertChatRouterConfigured(): boolean {
+  return buildChatRouter() !== undefined;
+}
+
 export async function buildDeps(): Promise<Deps> {
   if (cached) return cached;
 
@@ -256,24 +291,7 @@ export async function buildDeps(): Promise<Deps> {
       privyOwnerClient ??= new PrivyClient({ authorizationKey: key });
       return privyOwnerClient;
     },
-    get chatRouter() {
-      /**
-       * Built once, on first use, and `null` records "asked and there is no
-       * key" so a keyless deployment does not re-read the environment on
-       * every unmatched message.
-       *
-       * The key is read here rather than inside the router so that a
-       * deployment's configuration is resolved where every other credential
-       * is. `@nymspace/graph` reads `GEMINI_API_KEY` the same way for the
-       * ranking step; this is the same key behind the same `server-only`
-       * guard, doing a different job.
-       */
-      if (chatRouter === undefined) {
-        const apiKey = process.env["GEMINI_API_KEY"];
-        chatRouter = apiKey ? createAdkRouter({ apiKey }) : null;
-      }
-      return chatRouter ?? undefined;
-    },
+    chatRouter: buildChatRouter(),
     get paymentToken() {
       // `??=` would re-resolve on every access once the answer is `null`, and
       // `null` is the ordinary answer for a native-ETH deployment.

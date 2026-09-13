@@ -273,3 +273,41 @@ Five findings, all of them in this change rather than upstream, all fixed.
   validator was still checking the whole fleet, so it would have accepted an id
   the schema never offered. The matcher reads the whole store and is
   unaffected, so an agent outside the window is still reachable by name
+
+## 15. A second review pass
+
+Four more, one of them a fix from section 14 that did not go far enough.
+
+- [x] 15.1 `check-credentials.ts` asked the models endpoint for a list and
+  never paged it. Verified live: the default response is exactly fifty models
+  and a `nextPageToken`, so the pin-visibility assertions added in 0.4 were
+  membership tests against a truncated list. Both pins sort into the first
+  fifty today, which is luck; Google adds models continually, and the day one
+  falls past the fiftieth entry Gate 0 would fail for a model that answers
+  every request. It now pages, bounded at ten pages
+- [x] 15.2 `measure-routing.ts` assumed one `route()` call is one attempt, and
+  the retry added in 9.5 made that false — every call it measured already spent
+  a second attempt, so `placedFirst` was a placement after a retry and the
+  retry section was measuring a third. Those numbers decide which model is
+  pinned, and the table in `model.ts` predates the retry. `AdkRouterConfig`
+  takes `retry`, the script passes `false`, and `router.test.ts` pins it
+- [x] 15.3 Gate G's decline assertion passed on a timeout as readily as on a
+  decline, because the route renders both as the unanswered state — correct for
+  an operator, useless for a gate. In one of this provider's slow windows it
+  would have recorded "the model refused to force a tool" for a run where the
+  model was never reached. The gate keeps the sink it was discarding and reads
+  `miss=no_call` from the log, where the distinction has been all along
+- [x] 15.4 Section 14.1 moved the router's *per-request* construction inside
+  the try and left its *only construction site* outside everything: a
+  `createAdkRouter` that throws in the deps getter was still a 500, and because
+  the failed attempt left the cache `undefined` it was rebuilt and rethrown on
+  every request after it, forever. Resolved at startup instead — `index.ts`
+  calls `assertChatRouterConfigured()` before `serve()`, so a malformed key
+  stops the deployment rather than quietly degrading it, and the boot line says
+  whether routing is configured. No key stays a supported way to run
+
+- [ ] 15.5 Not this change's, and noticed while reviewing: `.railway/railway.ts`
+  sets `CONSOLE_MCP_TOKEN` twice in one object literal, so one value silently
+  overwrites the other. Nothing catches it because the root `tsconfig.json`
+  covering `.railway/` and `scripts/` is not in turbo's `typecheck` pipeline —
+  `pnpm typecheck` runs nine workspaces and the repo root is not one of them
