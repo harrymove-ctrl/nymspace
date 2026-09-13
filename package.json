@@ -40,5 +40,8 @@
     "viem": "^2.56.3",
     "vitest": "^5.0.0"
   },
-  "packageManager": "pnpm@10.28.0"
+  "packageManager": "pnpm@10.28.0",
+  "dependencies": {
+    "@nymspace/adk": "workspace:*"
+  }
 }

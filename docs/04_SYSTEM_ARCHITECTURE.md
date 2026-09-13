@@ -267,8 +267,12 @@ outage as a market with nothing in it.
 ### Console chat routing — `@nymspace/adk`
 
 `packages/adk/src/router.ts`, with the tool contract in `tools.ts`.
-`ROUTING_MODEL` is `"gemini-2.5-flash"`, keyed by the same `GEMINI_API_KEY`
-behind the same `server-only` guard.
+`ROUTING_MODEL` is `"gemini-3.5-flash-lite"`, keyed by the same
+`GEMINI_API_KEY` behind the same `server-only` guard. Pinned on the measurement
+in `packages/adk/evidence/routing-models.json`, and pinned on the *shape* of
+the failures rather than the count: the models that miss by saying nothing land
+on the unanswered state, and the one that answered every time sent half of them
+to the wrong agent.
 
 The chat answers from live reads and a deterministic matcher decides which
 read. This is the stage behind that matcher, and only that: it takes a

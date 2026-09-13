@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@nymspace/adk':
+        specifier: workspace:*
+        version: link:packages/adk
     devDependencies:
       '@nymspace/api':
         specifier: workspace:*

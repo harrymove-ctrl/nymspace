@@ -33,7 +33,9 @@ Every argument is drawn from a closed set:
 ```text
 agent        one of the ids returned by store.listAgents(ORGANIZATION_ID), this request
 recordKey    one of agentEndpointKey("mcp") | agentEndpointKey("a2a") | AGENT_CONTEXT_KEY
-amount       a decimal string, re-parsed server-side into wei; never a float, never trusted as base units
+amount       a decimal string of whole ETH, bounded to 12 digits so wei arriving
+             in an ETH field is refused; re-parsed server-side through the
+             matcher's own conversion, never trusted as base units
 recipient    a 0x address, checked with isAddress, defaulting as paymentPlan already defaults
 label        a new agent's label, validated against the same rule POST /v1/agents applies
 value        free text — the only free-text argument, and it is a record's value, which is free text
@@ -107,7 +109,7 @@ Missing credential, timeout, 429, 503, malformed response, unknown tool name, an
 
 No new error surface, because there is no better answer available: the operator asked something the console could not route, which is what that state says. A 5xx here would report the provider's health as the product's, which is the same objection `/health` exists to avoid.
 
-The timeout is a hard budget, set below the point where a person watching a demo assumes the page is broken, and it is the reason the matcher runs first — the nine demo sentences never wait on a provider at all.
+The timeout is a hard budget. It was written down here as "below the point where a person watching a demo assumes the page is broken", and the measurement moved it: ten seconds, from a worst observed call of nine. That is longer than the original intent and it is the right trade, for the reason running the matcher first makes available — the nine demo sentences never wait on a provider at all, so the budget is only ever spent on a question that would otherwise have been refused outright.
 
 ## D11 — Agent-supplied text is data, in the user turn
 
@@ -140,6 +142,23 @@ and hands it to `createAdkRouter`, so a keyless deployment resolves to no
 router where every other credential resolves, rather than inside a provider
 call on a request.
 
-**OQ3 — Which model, and at what timeout.** Pending measurement under D9. Record the runs the way Gate E recorded its own — model, successes over attempts, observed latency — in this file, and set the constant from that table.
+**OQ3 — Which model, and at what timeout. Closed: `gemini-3.5-flash-lite` at
+ten seconds.** The table is in `packages/adk/src/model.ts` and the runs in
+`packages/adk/evidence/routing-models.json`. The choice turns on the shape of
+the failures rather than the count: `gemini-3.1-flash-lite` answered every
+attempt and sent half of them to the wrong agent, `gemini-3.6-flash` was right
+whenever it answered and spent four of ten attempts on 429s, and the pinned
+model misses by producing an empty turn — which lands on the unanswered state
+that already exists. Seven placements in ten, against ten refusals in ten
+before this stage existed.
+
+The timeout has its own lesson, and it is why this entry says *re-measure*.
+The first measurement run reported a 720ms median for the pinned model; a
+four-second budget derived from it timed out five of seven live calls in the
+next Gate F run, and two assertions then "passed" because a timeout is also a
+miss. A later run of the same two questions on the same key put the median at
+6.7s and the worst call at 9.0s; the run after that came back between 0.8s and
+1.5s. This provider's latency moves by an order of magnitude within an hour, so
+the budget is set from the worst observed call and never from the median.
 
 **OQ4 — Does a model-routed answer need its own tone in the console?** D5 requires disclosure, not a particular treatment. Whether that is a pill beside the title, a line in the caption, or something the design register already has is the console's decision, and `console-design-system` owns it. What it must not be is absent, and it must not look like a verification badge.

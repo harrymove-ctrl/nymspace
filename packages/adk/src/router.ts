@@ -56,7 +56,26 @@ export type RouterMiss =
 
 export type ChatRouting =
   | { kind: "call"; tool: ChatToolName; call: ChatToolCall; elapsedMs: number }
-  | { kind: "miss"; reason: RouterMiss; elapsedMs: number };
+  | {
+      kind: "miss";
+      reason: RouterMiss;
+      /**
+       * The provider's error *code*, on a `provider_error`, and never its
+       * message.
+       *
+       * The distinction is the whole reason this field can exist. A message
+       * can quote the request that produced it — which here contains the
+       * operator's question and the fleet — and would then be in a log line
+       * forever. A code is a closed vocabulary the provider defines, so it
+       * says which kind of outage this was and can carry nothing else.
+       *
+       * Added after the first live run, where every failure looked identical
+       * and "the model declined" was indistinguishable from "the key was
+       * refused" in the evidence file.
+       */
+      providerCode?: string;
+      elapsedMs: number;
+    };
 
 export interface RouterRequest {
   message: string;
@@ -185,6 +204,42 @@ export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
 
           if (step === "timeout") return { kind: "miss", reason: "timeout", elapsedMs: elapsed() };
           if (step.done) return { kind: "miss", reason: "no_call", elapsedMs: elapsed() };
+
+          /**
+           * A provider failure arrives as an event, not as a thrown error.
+           *
+           * ADK catches the failed call and yields an `Event` carrying
+           * `errorCode` — `UNKNOWN_ERROR` with `errorMessage: "fetch failed"`
+           * for an unreachable endpoint, `404` for a model this key cannot
+           * see, the provider's own code for a refused one. Without this
+           * branch the generator simply ends, and an outage reports as
+           * `no_call`: the console would say the *model* declined to place the
+           * question, when the model was never reached.
+           *
+           * Gate F assertion 7 exists because the first version of this file
+           * did exactly that, and every failing run looked like a model that
+           * had nothing to say.
+           */
+          if (step.value.errorCode) {
+            return {
+              kind: "miss",
+              /**
+               * `STOP` is the exception, and it is the common one.
+               *
+               * It is a finish reason, not a failure: the turn ended normally
+               * and the model chose to call nothing. ADK flags it because the
+               * event carries no content, but the fact it reports is exactly
+               * what {@link RouterMiss}'s `no_call` means — and the measurement
+               * run in `evidence/routing-models.json` shows it happening on
+               * every model tested, so treating it as an outage would have put
+               * a provider error in the log for the ordinary case of a
+               * question the model could not place either.
+               */
+              reason: step.value.errorCode === "STOP" ? "no_call" : "provider_error",
+              ...(step.value.errorCode !== "STOP" && { providerCode: step.value.errorCode }),
+              elapsedMs: elapsed(),
+            };
+          }
 
           const [first] = getFunctionCalls(step.value);
           if (!first?.name) continue;

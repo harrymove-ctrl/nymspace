@@ -8,7 +8,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify:routing": "tsx --env-file-if-exists=../../.env --conditions=react-server scripts/verify-routing.ts",
+    "measure:routing": "tsx --env-file-if-exists=../../.env --conditions=react-server scripts/measure-routing.ts"
   },
   "dependencies": {
     "@google/adk": "2.0.0",

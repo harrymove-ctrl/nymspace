@@ -217,6 +217,12 @@ async function routeWithModel(
     log.info("chat unrouted", {
       stage: "model",
       miss: routing.reason,
+      /**
+       * The provider's code, never its message — `@nymspace/adk` only carries
+       * the one. An outage and a model that had nothing to say are different
+       * operational facts, and on this route they produce the same screen.
+       */
+      ...(routing.providerCode && { providerCode: routing.providerCode }),
       modelMs: routing.elapsedMs,
     });
     return undefined;

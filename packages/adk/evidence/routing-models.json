@@ -1,0 +1,73 @@
+{
+  "ranAt": "2026-09-13T06:06:19.832Z",
+  "attempts": 5,
+  "requests": [
+    {
+      "label": "unmatched",
+      "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
+      "expect": "show_fleet"
+    },
+    {
+      "label": "one-agent",
+      "message": "how is the billing one set up, and what is it allowed to write",
+      "expect": "show_agent:agent-billing"
+    }
+  ],
+  "rows": [
+    {
+      "model": "gemini-3.5-flash-lite",
+      "correct": 7,
+      "answered": 7,
+      "attempts": 10,
+      "latencyMs": [
+        9030,
+        6055,
+        6738,
+        8209,
+        8481,
+        3735,
+        6174
+      ],
+      "medianMs": 6738,
+      "outcomes": [
+        "unmatched=miss:no_call",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=miss:no_call",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=show_fleet",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=show_fleet",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=miss:no_call",
+        "one-agent=show_agent:agent-billing"
+      ]
+    },
+    {
+      "model": "gemini-3.6-flash",
+      "correct": 6,
+      "answered": 6,
+      "attempts": 10,
+      "latencyMs": [
+        5568,
+        3255,
+        5963,
+        3406,
+        4426,
+        3209
+      ],
+      "medianMs": 4426,
+      "outcomes": [
+        "unmatched=show_fleet",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=show_fleet",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=show_fleet",
+        "one-agent=show_agent:agent-billing",
+        "unmatched=miss:provider_error(429)",
+        "one-agent=miss:provider_error(429)",
+        "unmatched=miss:provider_error(429)",
+        "one-agent=miss:provider_error(429)"
+      ]
+    }
+  ]
+}

@@ -20,7 +20,8 @@
  */
 
 import { formatEther } from "viem";
-import { Agent0Client } from "@nymspace/graph";
+import { Agent0Client, RANKING_MODEL } from "@nymspace/graph";
+import { ROUTING_MODEL } from "@nymspace/adk";
 import {
   chainConfig,
   createViemChainClient,
@@ -404,7 +405,8 @@ async function checkPrivy(): Promise<void> {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// Gemini — the discovery ranking step (design.md D12)
+// Gemini — the discovery ranking step (design.md D12), and the console chat's
+// routing stage (openspec/changes/route-the-console-chat-with-adk)
 //////////////////////////////////////////////////////////////////////////////
 
 async function checkGemini(): Promise<void> {
@@ -415,7 +417,9 @@ async function checkGemini(): Promise<void> {
       name: "authenticated model list",
       passed: false,
       code: "unset",
-      detail: "GEMINI_API_KEY is empty; the ranking step in section 4 is blocked",
+      detail:
+        "GEMINI_API_KEY is empty; the ranking step in section 4 is blocked, " +
+        "and the console chat falls back to its matcher for every question",
     });
     return;
   }
@@ -430,15 +434,48 @@ async function checkGemini(): Promise<void> {
       error?: { message?: string };
     };
 
+    const models = Array.isArray(body.models) ? body.models : [];
+
     record({
       provider: "gemini",
       name: "authenticated model list",
-      passed: response.ok && Array.isArray(body.models),
+      passed: response.ok && models.length > 0,
       code: String(response.status),
       detail: response.ok
-        ? `${body.models?.length ?? 0} models visible to this key`
+        ? `${models.length} models visible to this key`
         : (body.error?.message ?? response.statusText),
     });
+
+    /**
+     * The pinned models, checked against what this key can actually see.
+     *
+     * Not pedantry. `gemini-2.5-flash-lite` answers 404 on this key while
+     * sitting in Google's public model list, and a pin the key cannot reach
+     * fails at the first request rather than at startup — which on the chat
+     * route means every unmatched question silently falling back to the
+     * matcher, indistinguishable from a model that had nothing to say.
+     */
+    if (response.ok) {
+      const visible = new Set(
+        models
+          .map((model) => (model as { name?: string }).name)
+          .filter((name): name is string => typeof name === "string")
+          .map((name) => name.replace(/^models\//, "")),
+      );
+
+      for (const [label, pin] of [
+        ["ranking", RANKING_MODEL],
+        ["console routing", ROUTING_MODEL],
+      ] as const) {
+        record({
+          provider: "gemini",
+          name: `the ${label} model is visible to this key`,
+          passed: visible.has(pin),
+          code: visible.has(pin) ? "ok" : "absent",
+          detail: pin,
+        });
+      }
+    }
   } catch (error) {
     record({
       provider: "gemini",
