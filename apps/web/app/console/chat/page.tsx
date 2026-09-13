@@ -40,10 +40,7 @@ export default function ChatPage() {
         </Text>
       </VStack>
 
-      {/* The conversation owns its own scrolling and pins itself to the
-          newest turn, so a second scroller around it would fight it for the
-          scroll position. See `components/console/bend.tsx`. */}
-      <Frame surface="body" title="console" bend={false}>
+      <Frame surface="body" title="console">
         <ChatConsole suggestions={CONSOLE_SUGGESTIONS} />
       </Frame>
     </VStack>

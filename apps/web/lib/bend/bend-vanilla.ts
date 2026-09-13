@@ -467,21 +467,7 @@ export function createBend(
     const max = content.scrollHeight - content.clientHeight;
     const t = content.scrollTop;
     scrollable = max > 1;
-    /*
-      `ease` is a distance, and a region may not have it.
-
-      Upstream bends the page, which always has further to scroll than its edges
-      need to flatten over, so a flat 240 works there. A console frame overflows
-      by seventy or eighty pixels, and against a fixed 240 that means scrolling
-      the whole region reaches a quarter of a fold and never more — the effect
-      is configured on and still never appears.
-
-      So the configured distance is a ceiling, not the value. Each edge flattens
-      over half of whatever scroll there actually is, up to that ceiling, which
-      leaves the other half fully folded. A frame that overflows by a little
-      folds fast; one that overflows by a lot behaves exactly as upstream.
-    */
-    const e = Math.max(Math.min(config.ease, max * 0.5), 1);
+    const e = Math.max(config.ease, 1);
     const ramp = (v: number) => {
       const x = Math.min(Math.max(v / e, 0), 1);
       return x * x * (3 - 2 * x);
@@ -494,9 +480,22 @@ export function createBend(
   syncScroll();
   syncBgColor();
 
+  /*
+    An icon that finished decoding after the paint that wanted it.
+
+    The raster skips an image it cannot draw yet and says so here rather than
+    holding the frame. Without this the loop can settle on the one paint that
+    was too early — which is exactly what happens on load, when the fold is
+    already engaged and every icon on the screen is still in flight.
+  */
+  const rasterReady = () => {
+    contentDirty = true;
+    start();
+  };
+
   let raster: DomRaster | null = htmlInCanvas
     ? null
-    : createDomRaster(content, bgCss);
+    : createDomRaster(content, bgCss, rasterReady);
   /* The colour the current raster was built with. `createDomRaster` takes the
      background once, so a theme toggle needs a new one rather than a setter. */
   let rasterBg = bgCss;
@@ -543,7 +542,7 @@ export function createBend(
     contentDirty = false;
     syncBgColor();
     if (bgCss !== rasterBg) {
-      raster = createDomRaster(content, bgCss);
+      raster = createDomRaster(content, bgCss, rasterReady);
       rasterBg = bgCss;
       if (!raster) return;
     }
@@ -580,14 +579,21 @@ export function createBend(
       reactions to scrolling, and on a region that does not scroll they would
       cover a frame the operator never asked to bend.
     */
+    /*
+      The threshold is a hundredth of a fold rather than a thousandth because
+      the cover is a real cost: the raster is a silhouette, so swapping the live
+      DOM for it buys nothing at a fold nobody can see. A page that overflows by
+      a dozen pixels sits at about a four-hundredth of a fold forever, and that
+      is exactly the case this keeps uncovered.
+    */
     const engaged =
       htmlInCanvas ||
       (raster !== null &&
         scrollable &&
         !focusWithin &&
         !selectionWithin &&
-        (topCurrent > 1e-3 ||
-          bottomCurrent > 1e-3 ||
+        (topCurrent > 1e-2 ||
+          bottomCurrent > 1e-2 ||
           phiCurrent !== 0 ||
           tiltXCurrent !== 0 ||
           tiltYCurrent !== 0));

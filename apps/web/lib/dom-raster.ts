@@ -19,8 +19,13 @@
  *
  * ## What it is and is not
  *
- * It is not a renderer. It has no gradients, no shadows, no transforms, no
- * stacking-context ordering beyond tree order, no images. It is a faithful
+ * It is not a renderer. It has no gradients, no shadows, no transforms and no
+ * stacking-context ordering beyond tree order. It draws images and inline SVG,
+ * which it did not when this was written for DecryptReveal alone: that list was
+ * meant as things to add when a screen needed them, and Bend needed them. It
+ * covers the whole console rather than one revealed circle, and the console's
+ * header carries two icons that are inline SVG — silhouetted, they came out as
+ * empty circles on every screen. It is otherwise a faithful
  * *silhouette*: ink where the UI has ink, in the colour the UI has it, at the
  * position the UI has it — which is precisely and only what the glyph matcher
  * reads. A shadow the raster omits changes no glyph.
@@ -46,6 +51,39 @@ const SKIPPED = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"]);
 
 const TRANSPARENT = /^(transparent|rgba\(0,\s*0,\s*0,\s*0\))$/;
 
+/**
+ * The properties that decide what an SVG shape looks like.
+ *
+ * Copied onto a clone before serialising, because a serialised SVG leaves the
+ * document behind and with it every stylesheet: `stroke="currentColor"` has no
+ * colour to inherit, and a `class` that shaped the icon matches no rule. The
+ * computed values have already resolved both, so inlining them is what makes
+ * the copy look like the original rather than like its markup.
+ *
+ * `mask` and `clip-path` are deliberately absent. Both travel as attributes
+ * that serialisation keeps, pointing at defs it also keeps, and writing the
+ * computed form on top of a working attribute is the one way to break them.
+ */
+const SVG_PAINT = [
+  "fill", "fill-opacity", "fill-rule",
+  "stroke", "stroke-width", "stroke-opacity",
+  "stroke-linecap", "stroke-linejoin",
+  "stroke-dasharray", "stroke-dashoffset",
+  "opacity", "color", "display", "visibility",
+  "transform", "transform-origin",
+  "font-family", "font-size", "font-weight", "text-anchor",
+];
+
+/**
+ * How many distinct rasterised icons to keep.
+ *
+ * Keyed on the serialised markup, so an icon mid-animation is a new key on
+ * every frame it changes — bounded rather than unbounded, because the console's
+ * sound toggle animates its own paths and would otherwise hold every frame of
+ * that animation for the life of the page.
+ */
+const SVG_CACHE_LIMIT = 64;
+
 export interface DomRaster {
   /** The texture. Resized by {@link DomRaster.paint}. */
   readonly canvas: HTMLCanvasElement;
@@ -59,10 +97,64 @@ export interface DomRaster {
 export function createDomRaster(
   root: HTMLElement,
   background: string,
+  /**
+   * Called once when an image this paint had to skip has finished decoding.
+   *
+   * An `<img>` or an inline SVG is not ready the instant it is first asked for,
+   * and a caller that repaints only on its own schedule would keep the version
+   * without it. Optional: DecryptReveal repaints under a moving cursor and will
+   * come back on its own.
+   */
+  onReady?: () => void,
 ): DomRaster | null {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) return null;
+
+  /* Serialised markup to the image decoding it. A value that is present but not
+     yet `complete` is in flight; `paint` skips it and `onReady` brings the
+     caller back. */
+  const svgCache = new Map<string, HTMLImageElement>();
+
+  function inlinePaint(source: Element, clone: Element) {
+    const style = getComputedStyle(source);
+    let inline = "";
+    for (const property of SVG_PAINT) {
+      const value = style.getPropertyValue(property);
+      if (value) inline += `${property}:${value};`;
+    }
+    clone.setAttribute("style", inline);
+    const from = source.children;
+    const to = clone.children;
+    for (let i = 0; i < from.length && i < to.length; i++) {
+      inlinePaint(from[i]!, to[i]!);
+    }
+  }
+
+  function svgImage(element: SVGSVGElement, rect: DOMRect) {
+    const clone = element.cloneNode(true) as SVGSVGElement;
+    inlinePaint(element, clone);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", String(rect.width));
+    clone.setAttribute("height", String(rect.height));
+    if (!clone.getAttribute("viewBox")) {
+      clone.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
+    }
+
+    const markup = new XMLSerializer().serializeToString(clone);
+    const cached = svgCache.get(markup);
+    if (cached) return cached.complete && cached.naturalWidth > 0 ? cached : null;
+
+    const image = new Image();
+    image.addEventListener("load", () => onReady?.(), { once: true });
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+    svgCache.set(markup, image);
+    if (svgCache.size > SVG_CACHE_LIMIT) {
+      const oldest = svgCache.keys().next().value;
+      if (oldest !== undefined) svgCache.delete(oldest);
+    }
+    return null;
+  }
 
   /*
     One range, reused for every text node in every repaint.
@@ -185,6 +277,50 @@ export function createDomRaster(
     }
   }
 
+  /**
+   * An image, or an inline SVG, drawn at the box layout gave it.
+   *
+   * Returns whether the element was one — the caller stops there either way for
+   * an SVG, because its children are shapes rather than boxes and the silhouette
+   * walk below would paint their bounding rectangles as if they were.
+   */
+  function paintGraphic(element: Element, origin: DOMRect): boolean {
+    if (element instanceof SVGSVGElement) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 0.5 || rect.height < 0.5) return true;
+      const image = svgImage(element, rect);
+      if (image) {
+        ctx!.drawImage(
+          image,
+          rect.left - origin.left,
+          rect.top - origin.top,
+          rect.width,
+          rect.height,
+        );
+      }
+      return true;
+    }
+
+    if (element instanceof HTMLImageElement) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 0.5 || rect.height < 0.5) return true;
+      if (element.complete && element.naturalWidth > 0) {
+        ctx!.drawImage(
+          element,
+          rect.left - origin.left,
+          rect.top - origin.top,
+          rect.width,
+          rect.height,
+        );
+      } else {
+        element.addEventListener("load", () => onReady?.(), { once: true });
+      }
+      return true;
+    }
+
+    return false;
+  }
+
   function walk(node: Node, origin: DOMRect) {
     if (node.nodeType === Node.TEXT_NODE) {
       const parent = (node as Text).parentElement;
@@ -209,6 +345,7 @@ export function createDomRaster(
     }
 
     paintBox(element, style, origin);
+    if (paintGraphic(element, origin)) return;
     for (const child of element.childNodes) walk(child, origin);
   }
 

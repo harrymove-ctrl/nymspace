@@ -3,8 +3,6 @@ import { Text } from "@astryxdesign/core/Text";
 import { cn } from "cn";
 import type { ReactNode } from "react";
 
-import { BendScroll } from "@/components/console/bend";
-
 /**
  * The console's framed surface.
  *
@@ -66,7 +64,6 @@ export function Frame({
   title,
   subtitle,
   surface = "body",
-  bend,
   children,
   className,
 }: {
@@ -75,37 +72,10 @@ export function Frame({
   title: string;
   subtitle?: string;
   surface?: FrameSurface;
-  /**
-   * The height, in CSS pixels, past which the frame's contents scroll on the
-   * face of a cube instead of growing the frame. `false` turns that off for a
-   * frame that owns its own scrolling.
-   *
-   * The default is deliberately shorter than it looks like it should be. The
-   * console's frames run from about 90 to 430 pixels, so a cap set where a
-   * frame is "too tall to read" would be above nearly all of them and the fold
-   * would exist on one screen in the product.
-   *
-   * On by default, and on by default is the point: the fold is a property of
-   * the console's framed surface, not a decoration a screen opts into one
-   * frame at a time. A frame shorter than this keeps the height it had and is
-   * left untouched — see `components/console/bend.tsx`.
-   */
-  bend?: number | false;
   children: ReactNode;
   className?: string;
 }) {
   const punch = SURFACE[surface];
-
-  const body = (
-    <VStack gap={4} paddingInline={5} paddingBlock={6} width="100%" className="min-w-0 max-w-full">
-      {subtitle ? (
-        <Text type="supporting" as="p">
-          {subtitle}
-        </Text>
-      ) : null}
-      {children}
-    </VStack>
-  );
 
   return (
     <VStack
@@ -143,13 +113,14 @@ export function Frame({
 
       <Corners punch={punch} />
 
-      {bend === false ? (
-        body
-      ) : (
-        <BendScroll height={bend} className="max-w-full">
-          {body}
-        </BendScroll>
-      )}
+      <VStack gap={4} paddingInline={5} paddingBlock={6} width="100%" className="min-w-0 max-w-full">
+        {subtitle ? (
+          <Text type="supporting" as="p">
+            {subtitle}
+          </Text>
+        ) : null}
+        {children}
+      </VStack>
     </VStack>
   );
 }
