@@ -144,10 +144,24 @@ export function ConnectVisitor() {
   }
 
   if (!visitor.address) {
+    /*
+      `primary`, not `secondary`.
+
+      It was secondary while connecting was optional — a header affordance for
+      the one screen that wanted a visitor's address. It is not optional any
+      more: `DecryptGate` veils the console until this button has been pressed,
+      so this is the only way past a screen the visitor cannot otherwise use,
+      and a quiet outline beside a locked console is a way out that looks like
+      chrome. The gate's own prompt carries the same control for the same
+      reason; this one is where a visitor who has scrolled past it looks.
+
+      It reverts to a plain address chip the moment it succeeds — nothing stays
+      loud after the thing it was pointing at is done.
+    */
     return (
       <Button
         size="sm"
-        variant="secondary"
+        variant="primary"
         label="Connect"
         onClick={visitor.connect}
       />

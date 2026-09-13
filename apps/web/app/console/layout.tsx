@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SoundToggle } from "@/components/ui/sound";
 import { ConsoleNav } from "@/components/console/nav";
+import { DecryptGate } from "@/components/console/decrypt-gate";
 import { ViewTransition } from "@/components/console/view-transition";
 import { ConnectVisitor, VisitorProvider } from "@/components/console/visitor";
 
@@ -112,8 +113,26 @@ export default function ConsoleLayout({ children }: LayoutProps<"/console">) {
           Only the screen fades. The header and nav sit outside, because chrome
           that re-animates on every navigation reads as the whole page reloading
           rather than as the content changing.
+
+          The gate sits in the same place and for a related reason. Every
+          console screen is withheld from a visitor who has not connected, and
+          putting that in the layout is what makes it true of all of them —
+          including a screen added next month, which is the case a per-page
+          wrapper gets wrong by omission rather than by argument. It also keeps
+          the count at one: Treasury and an agent's page carry three and five
+          frames each, and gating each frame would stack three and five
+          identical "connect" prompts down a single screen.
+
+          Inside the transition, so the veil fades in with the screen it veils
+          rather than sitting still while the content moves underneath it.
+
+          The header stays outside and stays crisp. The nav is how you see what
+          the console has, the Connect button beside it is the way through, and
+          enciphering either would be locking the door and hiding the handle.
         */}
-          <ViewTransition>{children}</ViewTransition>
+          <ViewTransition>
+            <DecryptGate minHeight="24rem">{children}</DecryptGate>
+          </ViewTransition>
         </VStack>
       </VisitorProvider>
     </VStack>

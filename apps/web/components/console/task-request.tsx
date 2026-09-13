@@ -12,6 +12,7 @@ import { formatAmount, fromBaseUnits, toBaseUnits } from "@nymspace/core";
 import { approvePayment, previewPayment, sendPayment } from "@/lib/api";
 import { classify } from "@/lib/console/errors";
 import { financialStateFrom, LOADING_COPY } from "@/lib/console/state";
+import { GraphMeter } from "@/components/console/graphs";
 import { Badge, Field, Frame, Loading, Outcome } from "./primitives";
 
 /**
@@ -62,6 +63,24 @@ const ORGANIZATION = "__organization__";
 export interface Peer {
   ensName: string;
   walletAddress?: string;
+}
+
+/**
+ * The typed amount as a fraction of the cap.
+ *
+ * BigInt throughout and scaled by a thousand before it becomes a `number`,
+ * because both operands are base units: at eighteen decimals a wei figure is
+ * well past what a double holds exactly, and `Number(amount) / Number(limit)`
+ * would be doing the one thing `toBaseUnits` exists to stop this file doing.
+ * Three digits is more resolution than a fourteen-tick bar can draw.
+ *
+ * A zero cap yields a full bar rather than a division by zero: a policy that
+ * permits nothing is a policy every amount exceeds.
+ */
+function capFraction(amount: string, limit: string) {
+  const cap = BigInt(limit);
+  if (cap <= 0n) return 1;
+  return Number((BigInt(amount) * 1000n) / cap) / 1000;
 }
 
 export function TaskRequest({
@@ -287,6 +306,31 @@ export function TaskRequest({
         and which side of the line the current number falls on, turns the
         refusal from a surprise into something the reader chose.
       */}
+      {/*
+        The same comparison, as a fill that moves while you type.
+
+        The badge below says which side of the line the number is on; this says
+        how close it is, which is the part an operator adjusting an amount
+        actually wants and the part two base-unit integers cannot give them at
+        a glance.
+
+        It is clamped at full, and over the cap that would quietly understate a
+        request ten times too large as merely "at the limit" — so the caption
+        carries the multiple whenever the bar has run out of room. A meter that
+        cannot show an overflow has to say so in words.
+      */}
+      {amount !== null ? (
+        <GraphMeter
+          title="against the cap"
+          value={capFraction(amount, limitAmount)}
+          caption={
+            overLimit
+              ? `${formatAmount(amount, token)} — over the ${formatAmount(limitAmount, token)} cap`
+              : `${formatAmount(amount, token)} of the ${formatAmount(limitAmount, token)} cap`
+          }
+        />
+      ) : null}
+
       <HStack gap={3} wrap="wrap" align="center">
         <Text type="supporting">
           Policy cap {formatAmount(limitAmount, token)} per transaction

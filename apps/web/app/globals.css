@@ -683,3 +683,180 @@ html::-webkit-scrollbar {
     transition: none;
   }
 }
+
+/* ── The connect gate's veil ──────────────────────────────────────────────
+   `components/console/decrypt-gate.tsx` draws a glyph cipher over a screen a
+   visitor may read and may not operate, and decodes a circle of it under the
+   cursor. The glyphs are canvas; this is the other half — the blur that is
+   what actually conceals, with the same circle cut out of it.
+
+   `--cipher-x`, `--cipher-y` and `--cipher-r` are written onto the host by the
+   field engine every frame. Declaring them here with `@property` is not
+   decoration: an unregistered custom property is a token list, so the radial
+   gradient would see the literal text `0px` before the engine's first frame
+   and, worse, could not be interpolated at all. Registered, they are lengths
+   the compositor understands.
+
+   The fallback starts the circle closed (`0px`), so a page whose script never
+   runs keeps the blur across the whole surface rather than losing it. */
+
+@property --cipher-x {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --cipher-y {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --cipher-r {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --cipher-r-inner {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+/* The host is the positioned box, the pointer target, and the only element
+   carrying the circle. Everything inside it reads the same four properties. */
+.cipher-host {
+  position: relative;
+  isolation: isolate;
+}
+
+/* The veiled content, sealed into one layer.
+
+   Without this the cipher had holes in it, and the holes were in exactly the
+   places a reader would look first. `Frame` positions its bracketed title and
+   its corner marks at `z-index: 10` so they sit over the dashed edge they
+   notch; the content wrapper was `static` with `z-index: auto`, which creates
+   no stacking context, so those tens were not ten *within the content* — they
+   were ten within the host, against a glyph canvas at two. Every frame title
+   on every console screen painted straight over the veil, in full colour,
+   perfectly legible.
+
+   `isolation: isolate` is the whole fix: it makes the content its own stacking
+   context, so its internal z-indices are ordered among themselves and the
+   entire subtree resolves as one layer underneath the canvas. `position` and
+   `z-index` alongside it because `isolation` alone is enough in every current
+   engine and costs nothing to make explicit — the layer this establishes is
+   the floor of the effect's three, and the other two are declared just below.
+
+   The lesson generalises past this component: an overlay's z-index is only a
+   promise about the elements it is actually competing with. */
+.cipher-content {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
+
+/* The way in, kept on screen.
+
+   The overlay is the veil's own box, which on the longer console screens is
+   several viewports tall. A card centred in it is centred in the *page*, not in
+   what the reader is looking at, so arriving at the new agent form meant a wall
+   of cipher with the only unlocked control somewhere below the fold.
+
+   Sticky rather than fixed: fixed would keep the card on screen after the
+   console has scrolled past, floating over the footer of a page it no longer
+   belongs to. Sticky is bounded by its parent, so the card travels the length
+   of the veil and stops with it.
+
+   A third of the way down rather than centred, so it sits above the middle of
+   the reading area and leaves the widest part of the cipher visible underneath
+   — the effect is the argument for connecting, and hiding it behind the card
+   that asks would be a strange way to make the case. */
+.cipher-prompt {
+  position: sticky;
+  top: 30vh;
+}
+
+/* The glyphs.
+
+   Above the blur, and that ordering is the whole picture: the sheet frosts
+   what is behind it, so anything painted before it gets frosted and anything
+   painted after it does not. The cipher is the thing a reader is meant to see
+   sharply — a blurred field of blurred characters is just fog — and the
+   console is the thing that must not be. Layering them the other way around,
+   which is what DOM order alone gives you, produces exactly that fog.
+
+   `z-index` here rather than a utility on the element, so the three layers of
+   this effect are declared next to each other and a change to one is made
+   while looking at the other two. */
+.cipher-glyphs {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* The blur.
+
+   `backdrop-filter` rather than `filter` on the content: filtering the content
+   itself would make it a containing block for its own descendants and blur the
+   prompt sitting on top of it. A backdrop layer is a sheet over the top — the
+   thing it frosts is whatever happens to be behind it, which is precisely the
+   content and precisely not the prompt.
+
+   The mask is the hole. Transparent inside the inner radius means the sheet is
+   absent there and the UI underneath is untouched; opaque outside the outer
+   radius means it is fully frosted; the ramp between them is the same
+   smoothstep the glyphs fade over, near enough that no seam is visible where
+   one ends and the other begins.
+
+   `saturate` alongside `blur` because a blurred screenshot of a UI is still
+   recognisably that UI by its colours alone — the status dots, the accent on a
+   button. Draining the colour is what turns it from "a console you can almost
+   read" into "a surface with something on it". */
+.cipher-blur {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  /* Unprefixed only, and deliberately so. Written with a `-webkit-` twin
+     beside it, Lightning CSS read the pair as one authored prefix set and kept
+     the last — which is the Safari spelling Chrome has never supported, so the
+     blur silently did nothing in the browser most visitors use. The build adds
+     whatever prefixes its targets need; writing them by hand takes that
+     decision away from it and gets it wrong. */
+  backdrop-filter: blur(9px) saturate(0.2) contrast(0.85);
+  background-color: color-mix(in oklab, var(--color-background-body) 62%, transparent);
+  mask-image: radial-gradient(
+    circle at var(--cipher-x) var(--cipher-y),
+    transparent 0,
+    transparent var(--cipher-r-inner),
+    black var(--cipher-r)
+  );
+}
+
+/* Without `backdrop-filter` the sheet paints nothing and the console would sit
+   there in the clear behind a field of glyphs. The colour is the fallback: an
+   opaque-enough wash of the page's own surface, which hides the same thing a
+   blur would and reveals through the same mask. */
+@supports not (backdrop-filter: blur(1px)) {
+  .cipher-blur {
+    background-color: color-mix(in oklab, var(--color-background-body) 92%, transparent);
+  }
+}
+
+/* Reduced motion keeps the veil and drops the chase.
+
+   The gate is not decoration — removing it would hand an unconnected visitor a
+   console that looks operable — so what goes is the easing, not the effect.
+   The engines already hold the circle to the cursor with no smoothing under
+   the same query; this is the CSS half of that, and it exists so nothing here
+   animates a filter on a moving mask. */
+@media (prefers-reduced-motion: reduce) {
+  .cipher-blur {
+    transition: none;
+  }
+}

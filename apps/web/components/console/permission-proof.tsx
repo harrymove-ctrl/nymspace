@@ -107,15 +107,29 @@ export function PermissionProof({
   return (
     <VStack gap={4}>
       <HStack gap={2} wrap="wrap">
+        {/*
+          Named by the record, not by its permission.
+
+          These read "Write a permitted record" and "Attempt a protected
+          record", which is the argument stated in the vocabulary of the
+          argument: two abstract p-words, alike at a glance, and neither says
+          what is about to be touched. A reader had to work out which was
+          which before they could care about the result.
+
+          Naming the records instead makes the pair self-evident — an endpoint
+          is operational, a registration is identity — and "Try to" is what
+          carries the expectation, so the refusal lands as the answer rather
+          than as something that went wrong.
+        */}
         <Button
           variant="primary"
-          label="Write a permitted record"
+          label="Update the MCP endpoint"
           onClick={runPermitted}
           isDisabled={busy !== null || !base}
         />
         <Button
           variant="secondary"
-          label="Attempt a protected record"
+          label="Try to rewrite the registration"
           onClick={runProtected}
           isDisabled={busy !== null || !protectedKey}
         />
@@ -130,8 +144,14 @@ export function PermissionProof({
 
       {busy ? <Loading what={busy} /> : null}
 
-      {allowed ? <ProofResult label="Permitted write" result={allowed} /> : null}
-      {denied ? <ProofResult label="Protected write" result={denied} /> : null}
+      {/*
+        The label leads the outcome's title, so it names the same record the
+        button did rather than restating its permission — "Endpoint write —
+        allowed by the Permissioned Resolver" reads as a result; "Permitted
+        write — allowed" read as the page agreeing with itself.
+      */}
+      {allowed ? <ProofResult label="Endpoint write" result={allowed} /> : null}
+      {denied ? <ProofResult label="Registration write" result={denied} /> : null}
 
       {allowed && denied ? (
         <Text type="supporting" as="p">
