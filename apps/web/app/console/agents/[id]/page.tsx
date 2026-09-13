@@ -6,13 +6,21 @@ import { VStack } from "@astryxdesign/core/VStack";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { agentMcpEndpoint, formatAmount, isPublishableEndpoint } from "@nymspace/core";
-import { fetchIdentity, fetchPermissions, fetchTreasury, fetchWallet } from "@/lib/api";
+import {
+  fetchActivity,
+  fetchIdentity,
+  fetchPermissions,
+  fetchTreasury,
+  fetchWallet,
+} from "@/lib/api";
 import { EMPTY_STATES } from "@/lib/console/errors";
 import {
   identityStateFrom,
   VERIFICATION_LABELS,
   type VerificationState,
 } from "@/lib/console/state";
+import { PAGE, summarise } from "@/lib/console/agent-history";
+import { AgentHistory } from "@/components/console/agent-history";
 import { AuthorityMatrix } from "@/components/console/authority-matrix";
 import { ConnectFromClaude } from "@/components/console/connect-from-claude";
 import { McpConnect } from "@/components/console/mcp-connect";
@@ -47,7 +55,7 @@ export default async function AgentPage({
 }: PageProps<"/console/agents/[id]">) {
   const { id } = await params;
 
-  const [identity, permissions, wallet, fleet] = await Promise.all([
+  const [identity, permissions, wallet, fleet, activity] = await Promise.all([
     fetchIdentity(id).catch(() => null),
     fetchPermissions(id).catch(() => null),
     fetchWallet(id).catch(() => null),
@@ -64,6 +72,16 @@ export default async function AgentPage({
       page.
     */
     fetchTreasury().catch(() => null),
+    /*
+      This agent's slice of the log, for the history section.
+
+      Capped rather than unbounded, and `summarise` reports whether it hit the
+      cap so the chart can say the counts are of a page. Tolerated as null on
+      the same terms as the treasury read: the log is the store's record of
+      what happened, not an authority over anything on this page, so losing it
+      costs one section rather than the screen.
+    */
+    fetchActivity({ agent: id, limit: PAGE }).catch(() => null),
   ]);
 
   if (!identity) notFound();
@@ -81,6 +99,8 @@ export default async function AgentPage({
   const mcpBase = process.env.AGENT_MCP_BASE_URL;
   const derived = mcpBase ? agentMcpEndpoint(mcpBase, identity.label) : null;
   const mcpEndpoint = derived && isPublishableEndpoint(derived) ? derived : null;
+
+  const history = activity ? summarise(activity.events) : null;
 
   return (
     <VStack as="main" gap={8} width="100%" className="min-w-0">
@@ -340,6 +360,22 @@ export default async function AgentPage({
           currentValue={identity.records.mcp}
           endpoint={mcpEndpoint}
         />
+      </Frame>
+
+      {/* ── History ────────────────────────────────────────────────────── */}
+      <Frame
+        title="History"
+        subtitle="Every other section is state, true right now. This is the only one that is a record of use."
+      >
+        {history ? (
+          <AgentHistory history={history} readAt={new Date().toISOString()} />
+        ) : (
+          <Outcome
+            tone="fault"
+            title="The activity log could not be read"
+            detail="This is the store failing, not an agent that has done nothing. The two look identical on screen, which is why this says which it is."
+          />
+        )}
       </Frame>
 
       {/* ── Financial ──────────────────────────────────────────────────── */}
