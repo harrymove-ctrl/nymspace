@@ -16,6 +16,8 @@ export type ErrorKind =
   | "identity_policy"
   | "financial_policy"
   | "not_configured"
+  | "api_unreachable"
+  | "api_error"
   | "rpc_unavailable"
   | "indexing_pending"
   | "provider_error"
@@ -60,6 +62,40 @@ export const ERROR_COPY: Record<ErrorKind, Omit<ConsoleError, "detail">> = {
     tone: "waiting",
     action:
       "Nothing was sent and nothing was refused. Set the signing key to enable writes.",
+  },
+  /**
+   * The console's own API did not answer — not a chain, not a policy.
+   *
+   * It would have been less code to fold this into `rpc_unavailable`, and that
+   * is exactly the mistake `classify` warns about one case further down: an RPC
+   * fault and a denial are different facts and must not share a box. So are an
+   * unreachable API and an unreachable Sepolia. "Sepolia RPC unavailable" shown
+   * because `apps/api` is not running sends the operator to a chain explorer to
+   * debug a process on their own machine, and — worse in production — implies
+   * the network is down when the network is fine.
+   */
+  api_unreachable: {
+    kind: "api_unreachable",
+    title: "The console API did not answer",
+    tone: "fault",
+    action:
+      "Nothing was read and nothing was written. The console reads every screen from the API, so this is the API or the network in front of it, not the chain.",
+  },
+  /**
+   * The API answered, and what it answered with was a fault of its own.
+   *
+   * Split from `api_unreachable` because the operator's next move is the
+   * opposite one: unreachable means start the process, this means the process
+   * is running and its log has the reason. Collapsing the two into "Something
+   * failed" — which is what this rendered as before — sends someone to check
+   * whether a server they are already talking to is switched on.
+   */
+  api_error: {
+    kind: "api_error",
+    title: "The console API failed",
+    tone: "fault",
+    action:
+      "The API answered with a server error, so the fault is behind it — its own log carries the reason and the request id.",
   },
   rpc_unavailable: {
     kind: "rpc_unavailable",
@@ -143,6 +179,53 @@ export function classify(outcome: {
     return { ...ERROR_COPY.provider_error, detail };
   }
   return { ...ERROR_COPY.unknown, detail };
+}
+
+/**
+ * Classify something that was *thrown*, as opposed to an outcome body.
+ *
+ * `classify` reads the structured fields the API returns, which presumes the
+ * API answered. Nothing classified a failure to reach it at all, because
+ * nothing caught one: the console had no error boundary, so an unreachable API
+ * took the whole route out with a stack trace.
+ *
+ * Node reports a refused or unresolvable connection as a bare `fetch failed`
+ * with the real code on `cause`, so both are checked. The `cause` chain only
+ * survives on the server; a React error boundary receives the message alone,
+ * and in production Next replaces even that with a digest. That is why the
+ * message test is deliberately broad and the fallback is honest rather than
+ * specific — a boundary that guesses "API unreachable" for every production
+ * error would be inventing a diagnosis, which is the failure mode this
+ * taxonomy exists to prevent.
+ */
+export function classifyThrown(err: unknown): ConsoleError {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  const cause: unknown = err instanceof Error ? err.cause : undefined;
+  const codes: string[] = [];
+  if (cause && typeof cause === "object") {
+    const c = cause as { code?: unknown; errors?: { code?: unknown }[] };
+    if (typeof c.code === "string") codes.push(c.code);
+    for (const e of c.errors ?? []) if (typeof e?.code === "string") codes.push(e.code);
+  }
+  const haystack = `${message} ${codes.join(" ")}`;
+  if (
+    /fetch failed|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET|UND_ERR|Failed to fetch|NetworkError/i.test(
+      haystack,
+    )
+  ) {
+    return { ...ERROR_COPY.api_unreachable, detail: message };
+  }
+  /**
+   * `lib/api.ts` throws this exact shape for any non-ok status, and a 5xx from
+   * the console's own API is a different problem from a 4xx — the first is the
+   * API's fault, the second is this client asking for something wrong. Only
+   * the first gets the API's name on it.
+   */
+  const status = /request failed: (\d{3})/.exec(message)?.[1];
+  if (status && Number(status) >= 500) {
+    return { ...ERROR_COPY.api_error, detail: message };
+  }
+  return classify({ detail: message });
 }
 
 /**
