@@ -170,13 +170,27 @@ export function classify(outcome: {
   if (outcome.status === "not_configured") {
     return { ...ERROR_COPY.not_configured, detail };
   }
+  /**
+   * The named source first, the bare connection fault second.
+   *
+   * These two were the other way round, which was harmless only while `detail`
+   * was a status code with no words in it. The moment the API's own message
+   * came through, `Agent0 subgraph unreachable: fetch failed` — the graph
+   * client's wording when its fetch throws — matched `unreachable` and rendered
+   * as "Sepolia RPC unavailable": a subgraph outage reported as a chain outage,
+   * sending the operator to the wrong system entirely.
+   *
+   * So a message that names the subgraph is about the subgraph. The RPC test
+   * below keeps every message that describes a connection fault without saying
+   * what it could not reach.
+   */
+  if (/subgraph|provider|indexer/i.test(detail)) {
+    return { ...ERROR_COPY.provider_error, detail };
+  }
   if (/rpc|timed out|ECONN|unreachable/i.test(detail)) {
     // An RPC fault must never be shown as a denial: one says the agent is not
     // allowed, the other says we could not ask.
     return { ...ERROR_COPY.rpc_unavailable, detail };
-  }
-  if (/subgraph|provider|indexer/i.test(detail)) {
-    return { ...ERROR_COPY.provider_error, detail };
   }
   return { ...ERROR_COPY.unknown, detail };
 }

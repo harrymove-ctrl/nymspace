@@ -61,6 +61,8 @@ export function DiscoverForm() {
     error,
     resultCount: result?.candidateCount ?? 0,
   });
+  const failure =
+    state === "provider_error" ? classify({ error: error ?? "" }) : null;
   const rankingUnavailable =
     result !== null && "error" in result.ranking && result.ranking.error;
 
@@ -98,12 +100,21 @@ export function DiscoverForm() {
 
       {busy ? <Loading what={LOADING_COPY.discovery} /> : null}
 
-      {state === "provider_error" ? (
+      {/*
+        Title, tone and action all from the one classification.
+        The action used to be written here as a literal, which was true for the
+        case it was written for and a lie for every other one: a 503 from the
+        write gate rendered "the query never reached the subgraph" under the
+        headline "Something failed", telling the operator about an outage in a
+        system this request never got as far as. `classify` now sees the API's
+        own sentence, so the box says one thing.
+      */}
+      {failure ? (
         <Outcome
-          tone="fault"
-          title={classify({ error: error ?? "" }).title}
-          detail={error ?? undefined}
-          action="This is not an empty market — the query never reached the subgraph."
+          tone={failure.tone}
+          title={failure.title}
+          detail={failure.detail || undefined}
+          action={failure.action}
         />
       ) : null}
 
