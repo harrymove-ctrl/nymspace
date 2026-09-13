@@ -386,3 +386,48 @@ One finding, and one hypothesis disproved rather than reported.
   process that exits immediately loses nothing — `process.stdout.write` is
   synchronous for pipes on Linux and macOS, asynchronous only on Windows, and
   the deployment is Linux. A plausible failure is not a failure
+
+## 18. Run against the deployed console — 10.1, for real
+
+10.1 was closed with a caveat: the store stayed a fixture because this sandbox
+can reach neither Docker nor a local Postgres. It is closed without the caveat
+now, by driving the deployed console over HTTP through the web gateway. Four
+real agents in the store — deploy, research, stalker, trader.
+
+- [x] 18.1 The sentence from the screenshot that started this change returns
+  `kind: "lens"`, `routedBy: "model"`. It used to return the unanswered state
+- [x] 18.2 "tell me about the one that follows people around" reaches
+  `stalker.nymspace.eth`. Four agents, no name in the question, and the model
+  had only ids, slugs and ENS names to go on
+- [x] 18.3 "what has happened to the trading one since it was set up" reaches
+  `trader.nymspace.eth — audit trail`: the right agent *and* the right intent,
+  which are two separate things to get wrong
+- [x] 18.4 "can the deploy one write its own mcp endpoint" is answered
+  `routedBy: "matcher"` — "deploy" is a slug, so the matcher takes it and no
+  model is called. The order still holds in production
+- [x] 18.5 "what is the weather in Hanoi tomorrow" returns the unanswered state
+  with a 200
+
+## 19. The console MCP server was unreachable, and is not any more
+
+Found while answering why Claude Desktop does not behave like the console chat.
+It has no nymspace tools connected, so it answers about ENS in general and says
+registering a subname needs the user's wallet signature. In this product it does
+not: `create_agent` spends the organization's gas and the organization's key
+signs.
+
+- [x] 19.1 The server has been deployed and configured all along and no client
+  could complete a call. Probing it answered `406 Not Acceptable` — from the MCP
+  server itself, which is how you can tell it got past the token gate and died
+  on the transport
+- [x] 19.2 The web gateway forwarded `content-type` alone and hardcoded `POST`.
+  Streamable HTTP needs `accept` naming both JSON and `text/event-stream`, a
+  `GET` for the stream, a `DELETE` to end a session, and `Mcp-Session-Id` in
+  both directions
+- [x] 19.3 Widened for that one path. Opening arbitrary methods across `/v1/*`
+  would expose every read and delete through a path the file's own header calls
+  not-authentication. Headers cross by name, because a proxy that forwards
+  whatever it is given also forwards `cookie` and `origin` — and this one adds a
+  credential
+- [x] 19.4 Verified live after the deploy: `initialize` returns 200 and
+  `tools/list` returns twelve tools, `create_agent` among them
