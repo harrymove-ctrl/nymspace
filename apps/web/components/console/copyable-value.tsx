@@ -80,6 +80,14 @@ export function CopyableValue({
         <IconButton
           size="sm"
           variant="ghost"
+          /*
+            The clipboard has its own cue. Everything else here is a `button`,
+            which the sound layer reads as a press; a copy is the one press
+            whose result is somewhere other than the screen, and the two-note
+            answer is the only acknowledgement it gets when the icon flip is
+            off-screen or the value was taken by keyboard.
+          */
+          data-sound="copy"
           // The tooltip stays "Copy"; the icon flip is the confirmation, and
           // the label moves because that is what a screen reader announces.
           tooltip={action}
