@@ -105,6 +105,8 @@ function chatApp(
       getFinancialAuthority: async () => authority ?? undefined,
     },
     ens: recordingEns(calls, canSetText),
+    // The limit the payment plan reads to decide whether to warn.
+    privy: { getPolicyLimit: async () => ({ policyId: "policy-research", name: "cap", maxAmount: "1000000000000000", token: null }) },
     config: { chainId: 11155111 },
     registry: ADDRESS,
     organization: ADDRESS,
@@ -523,6 +525,8 @@ describe("who pays whom", () => {
           getFinancialAuthority: async (id: string) => authorityFor(id),
         },
         ens: recordingEns([]),
+        // Deliberately no `privy`: the plan must still answer when the policy
+        // limit cannot be read, rather than 500.
         config: { chainId: 11155111 },
         registry: ADDRESS,
         organization: ADDRESS,
@@ -580,5 +584,28 @@ describe("who pays whom", () => {
 
     expect(answer.kind).toBe("unanswered");
     expect(answer.message).toContain("no wallet of its own");
+  });
+});
+
+describe("a warning that means something", () => {
+  /**
+   * `expectDenial` used to sit on the send step unconditionally, so a payment
+   * comfortably under the cap was headed "Expected to be refused" and then
+   * succeeded — on the one screen whose whole argument is that the two
+   * outcomes are distinguishable before either happens.
+   */
+  it("does not warn about a payment under the limit", async () => {
+    const answer = await ask("pay 0.0001 ETH from research to research");
+
+    expect(answer.kind).toBe("plan");
+    expect(answer.title).toBe("Pay from the agent wallet");
+    expect(answer.steps[1].expectDenial).toBeUndefined();
+  });
+
+  it("warns about one over it, and says so in the title", async () => {
+    const answer = await ask("pay 0.005 ETH from research to research");
+
+    expect(answer.title).toBe("Attempt a payment over the limit");
+    expect(answer.steps[1].expectDenial).toContain("Privy refuses");
   });
 });

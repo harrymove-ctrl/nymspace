@@ -832,12 +832,52 @@ async function paymentPlan(
 
   const recipient = given ?? agent.controllerAddress;
 
+  /**
+   * The limit, read now, so the card can say which of the two outcomes this is.
+   *
+   * `expectDenial` used to sit on the send step unconditionally, carrying a
+   * sentence that explained both cases at once — so a payment comfortably under
+   * the cap was headed "Expected to be refused" and then succeeded. On the one
+   * screen whose whole argument is that a refusal and a success are
+   * distinguishable *before* either happens, the label contradicted the chain.
+   * A warning that fires every time is not a warning.
+   *
+   * `undefined` when the provider cannot be reached: then the card predicts
+   * nothing rather than guessing, which is the same rule the rest of this file
+   * follows about state it has not read.
+   */
+  /*
+    Captured before the closure. The guard above narrows `authority.policyId`
+    to a string, and TypeScript widens it straight back inside a callback —
+    correctly, since nothing stops the object changing between the two.
+  */
+  const policyId = authority.policyId;
+
+  const limit = await (async () => {
+    try {
+      return await deps.privy.getPolicyLimit(policyId);
+    } catch {
+      /*
+        `try`, not `.catch()`. A rejected promise is only half of it: reaching
+        through `deps.privy` at all throws synchronously when the client is not
+        there, and `.catch` never sees that — which turned a chat message into
+        a 500 on a route whose contract is a 200 and an answer.
+      */
+      return undefined;
+    }
+  })();
+
+  const over = limit ? BigInt(amountWei) > BigInt(limit.maxAmount) : undefined;
+
   return {
     kind: "plan",
-    title: "Pay from the agent wallet",
+    title: over ? "Attempt a payment over the limit" : "Pay from the agent wallet",
     summary:
-      `Checks the amount against the wallet's Privy policy, then sends it. Native ETH on Base Sepolia — ` +
-      `this adapter does not transfer tokens, whatever a policy's tokenAddress says.`,
+      (limit
+        ? `The wallet's policy caps a transfer at ${limit.maxAmount} wei; this one is ${amountWei}. `
+        : `Checks the amount against the wallet's Privy policy, then sends it. `) +
+      `Native ETH on Base Sepolia — this adapter does not transfer tokens, whatever a policy's ` +
+      `tokenAddress says.`,
     steps: [
       {
         title: "Preview against the spend limit",
@@ -852,8 +892,12 @@ async function paymentPlan(
         path: `/v1/agents/${id}/payments`,
         body: { amount: amountWei, recipient },
         actor: "agent wallet",
-        expectDenial:
-          "Over the per-transaction limit, Privy refuses on the signing path and no transaction is broadcast. Under it, this succeeds.",
+        ...(over
+          ? {
+              expectDenial:
+                "Over the per-transaction limit: Privy refuses on the signing path and no transaction is broadcast.",
+            }
+          : {}),
       },
     ],
     closing:
