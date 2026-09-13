@@ -493,3 +493,92 @@ describe("the words people reach for", () => {
     expect(answer.title).toBe("research.nymspace.eth");
   });
 });
+
+describe("who pays whom", () => {
+  /**
+   * `listAgents` is ordered by slug, so picking the first hit from it made
+   * "from research to deploy" resolve to deploy — alphabetically first, and
+   * the recipient rather than the payer. The console then answered that
+   * deploy has no wallet: not a failure to understand, but a confident answer
+   * about the wrong agent.
+   */
+  const fleet = [
+    agent,
+    {
+      ...agent,
+      id: "agent-deploy",
+      slug: "deploy",
+      ensName: "deploy.nymspace.eth",
+    },
+  ];
+
+  function payApp(authorityFor: (id: string) => unknown) {
+    return createApp(
+      { port: 0, allowedOrigins: [] },
+      {
+        store: {
+          listAgents: async () => fleet,
+          getAgent: async (id: string) => fleet.find((a) => a.id === id),
+          listActivity: async () => [],
+          getFinancialAuthority: async (id: string) => authorityFor(id),
+        },
+        ens: recordingEns([]),
+        config: { chainId: 11155111 },
+        registry: ADDRESS,
+        organization: ADDRESS,
+        controller: agent.controllerAddress,
+        parentName: "nymspace.eth",
+      } as unknown as Deps,
+      () => undefined,
+    );
+  }
+
+  const post = async (app: ReturnType<typeof createApp>, message: string) => {
+    const res = await app.fetch(
+      new Request("http://api.test/v1/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    return res.json();
+  };
+
+  it("pays from the agent after 'from', not the one the store lists first", async () => {
+    const app = payApp((id) =>
+      id === "agent-research"
+        ? { ...AUTHORITY, walletAddress: ADDRESS }
+        : { ...AUTHORITY, agentId: id, walletAddress: "0x0000000000000000000000000000000000000002" },
+    );
+
+    const answer = await post(app, "pay 0.001 ETH from research to deploy");
+
+    expect(answer.kind).toBe("plan");
+    expect(answer.steps[0].path).toBe("/v1/agents/agent-research/payments/preview");
+    expect(answer.steps[0].body.recipient).toBe(
+      "0x0000000000000000000000000000000000000002",
+    );
+  });
+
+  it("understands a verb the list did not have", async () => {
+    const app = payApp(() => ({ ...AUTHORITY, walletAddress: ADDRESS }));
+
+    // "Set 0.001 ETH from … to …" used to match no write verb at all and fall
+    // through to an agent lens.
+    const answer = await post(app, "Set 0.001 ETH from research to deploy");
+    expect(answer.kind).toBe("plan");
+    expect(answer.steps[0].path).toBe("/v1/agents/agent-research/payments/preview");
+  });
+
+  it("refuses a payee with no wallet rather than paying a shared controller", async () => {
+    const app = payApp((id) =>
+      id === "agent-research" ? { ...AUTHORITY, walletAddress: ADDRESS } : undefined,
+    );
+
+    const answer = await post(app, "pay 0.001 ETH from research to deploy");
+
+    expect(answer.kind).toBe("unanswered");
+    expect(answer.message).toContain("no wallet of its own");
+  });
+});

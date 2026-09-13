@@ -550,12 +550,46 @@ async function matchPlan(
     if (id && key) return recordPlan(id, key, matchValue(original), deps);
   }
 
-  // 5. Pay.
-  if (/\b(pay|send|transfer)\b/.test(text)) {
-    const id = await matchAgent(text, deps);
+  /*
+    5. Pay.
+
+    `move`, `wire` and `set` join the verbs because people use them — "Set
+    0.001 ETH from research to deploy" matched nothing and fell through to an
+    agent lens. They are safe here: this branch runs after the record-write
+    branch above, which claims anything phrased "as <agent>, set …", and it
+    fires only when the sentence also carries an ETH amount.
+  */
+  if (/\b(pay|send|transfer|move|wire|set)\b/.test(text)) {
     const amount = matchEth(text);
-    const recipient = /0x[0-9a-fA-F]{40}/.exec(text)?.[0];
-    if (id && amount) return paymentPlan(id, amount, recipient, deps);
+    const { payer, payee } = await matchTransfer(text, deps);
+
+    if (payer && amount) {
+      const literal = /0x[0-9a-fA-F]{40}/.exec(text)?.[0];
+      const named = payee ? await payeeAddress(payee, deps) : undefined;
+
+      /*
+        A named payee with no wallet is refused rather than quietly redirected.
+
+        Falling back to that agent's controller would send the money to an
+        address three agents share, which is the confusion `be40d4e` removed
+        from the task form. "Pay deploy" would then move ETH to something that
+        is not deploy, and the receipt would look like a success.
+      */
+      if (payee && !named) {
+        const agent = await deps.store.getAgent(payee);
+        return {
+          kind: "unanswered",
+          message:
+            `${agent?.ensName ?? payee} has no wallet of its own, so there is no address that is ` +
+            `only its. Paying it would mean paying the controller its peers share, which would ` +
+            `look like a receipt for something that did not happen. Name an address instead, or ` +
+            `provision a wallet for it first.`,
+          suggestions: [...CONSOLE_SUGGESTIONS],
+        };
+      }
+
+      return paymentPlan(payer, amount, literal ?? named, deps);
+    }
   }
 
   return undefined;
@@ -719,6 +753,17 @@ async function recordPlan(
   };
 }
 
+/**
+ * The address that is only this agent's.
+ *
+ * Its Privy wallet, or nothing. Deliberately not the controller: three agents
+ * in this fleet share one, so a controller address does not identify a payee.
+ */
+async function payeeAddress(id: string, deps: Deps): Promise<string | undefined> {
+  const authority = await deps.store.getFinancialAuthority(id);
+  return authority?.walletAddress ?? undefined;
+}
+
 /** The quoted or trailing value in "set X to Y". */
 function matchValue(original: string): string | undefined {
   const quoted = /["“](.+?)["”]/.exec(original);
@@ -855,14 +900,64 @@ async function connectPlan(id: string, deps: Deps): Promise<LensPlan | undefined
  * would answer confidently about something nobody asked about, and every
  * answer here carries an address someone might act on.
  */
-async function matchAgent(text: string, deps: Deps): Promise<string | undefined> {
+/**
+ * Every agent the sentence names, in the order the *sentence* names them.
+ *
+ * `listAgents` returns them ordered by slug, and picking the first hit from
+ * that list meant "pay 0.001 ETH from research to deploy" resolved to
+ * `deploy` — alphabetically first, and the recipient rather than the payer.
+ * The console then answered that deploy has no wallet: not "I did not
+ * understand", but a confident answer about the wrong agent, which is the one
+ * failure `matchAgent`'s own reasoning says this matcher must not produce.
+ *
+ * Position in the text is the closest thing to intent available here without
+ * parsing grammar, and it is right for the ordinary cases: the subject is
+ * named first, and "from X to Y" puts the payer before the payee.
+ */
+async function matchNamedAgents(
+  text: string,
+  deps: Deps,
+): Promise<{ id: string; at: number }[]> {
   const agents = await deps.store.listAgents(ORGANIZATION_ID);
-  const hit = agents.find(
-    (agent) =>
-      text.includes(agent.ensName.toLowerCase()) ||
-      new RegExp(`\\b${agent.slug.toLowerCase()}\\b`).test(text),
-  );
-  return hit?.id;
+
+  return agents
+    .map((agent) => {
+      const byName = text.indexOf(agent.ensName.toLowerCase());
+      const bySlug = new RegExp(`\\b${agent.slug.toLowerCase()}\\b`).exec(text);
+      const at = byName >= 0 ? byName : (bySlug?.index ?? -1);
+      return { id: agent.id, at };
+    })
+    .filter((hit) => hit.at >= 0)
+    .sort((a, b) => a.at - b.at);
+}
+
+async function matchAgent(text: string, deps: Deps): Promise<string | undefined> {
+  return (await matchNamedAgents(text, deps))[0]?.id;
+}
+
+/**
+ * Who pays and who is paid, read off "from" and "to".
+ *
+ * Falls back to the first agent named when the sentence has no "from", which
+ * is how "pay 0.0001 ETH from research to research" and the shorter
+ * "pay 0.0001 ETH from research" both keep working.
+ */
+async function matchTransfer(
+  text: string,
+  deps: Deps,
+): Promise<{ payer?: string; payee?: string }> {
+  const named = await matchNamedAgents(text, deps);
+  if (named.length === 0) return {};
+
+  const from = text.lastIndexOf(" from ");
+  const to = text.lastIndexOf(" to ");
+
+  if (from < 0 || to < 0 || to < from) return { payer: named[0]?.id };
+
+  const payer = named.find((hit) => hit.at > from && hit.at < to) ?? named[0];
+  const payee = named.find((hit) => hit.at > to);
+
+  return { payer: payer?.id, ...(payee && { payee: payee.id }) };
 }
 
 //////////////////////////////////////////////////////////////////////////////
