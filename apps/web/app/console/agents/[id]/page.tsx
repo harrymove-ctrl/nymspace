@@ -27,6 +27,7 @@ import { McpConnect } from "@/components/console/mcp-connect";
 import { PermissionProof } from "@/components/console/permission-proof";
 import { TaskRequest } from "@/components/console/task-request";
 import { VisitorAuthority } from "@/components/console/visitor-authority";
+import { GraphCheck, GraphTree } from "@/components/console/graphs";
 import {
   Absent,
   Badge,
@@ -49,6 +50,82 @@ import {
  * chain a second ago is already gone from this page.
  */
 export const dynamic = "force-dynamic";
+
+/**
+ * What this agent has, and therefore what this screen can offer.
+ *
+ * Derived from the same three reads the sections below render — `identity`,
+ * its `ensip25` branch, and `wallet` — rather than from a provisioning column
+ * in the store. `CLAUDE.md` is explicit that the store is not the authority
+ * for any of this, and a checklist that agreed with the store while disagreeing
+ * with the chain would be worse than no checklist: it would be a confident
+ * summary of a screen that says otherwise four frames down.
+ *
+ * The notes say what is missing rather than how to fix it. Provisioning happens
+ * on its own routes with its own confirmations; a line of instructions here
+ * would be a fifth place describing that flow, and the first to go stale.
+ */
+function provisioning(
+  identity: Awaited<ReturnType<typeof fetchIdentity>>,
+  /* Nullable, because the page tolerates a failed wallet read rather than
+     404ing on it — an unreachable Privy must cost the wallet rows, not the
+     identity above them. An unknown wallet reads the same as an absent one
+     here, which is the honest collapse: neither is a wallet you can spend
+     from, and the section below states the difference in full. */
+  wallet: Awaited<ReturnType<typeof fetchWallet>> | null,
+) {
+  const registered = Boolean(identity.registration);
+  const provisioned = wallet?.status === "provisioned" && Boolean(wallet.address);
+
+  return [
+    {
+      label: "ENS name, with a resolver",
+      done: true,
+      note: `${identity.ensName} resolves through ${identity.resolver}`,
+    },
+    {
+      label: identity.recordKeys.context,
+      done: Boolean(identity.records.context),
+      note: identity.records.context
+        ? undefined
+        : "No agent-context written, so the manifest has nothing to describe.",
+    },
+    {
+      label: identity.recordKeys.mcp,
+      done: Boolean(identity.records.mcp),
+      /*
+        Named as the reason the two connect controls are absent, because that
+        is the question this list exists to answer. A reader who scrolls past
+        an empty manifest and then finds no "Connect" button has been left to
+        infer the link; stating it costs one clause.
+      */
+      note: identity.records.mcp
+        ? undefined
+        : "No endpoint published, so there is nothing to connect to or dial from Claude.",
+    },
+    {
+      label: "ERC 8004 registration",
+      done: registered,
+      note: registered
+        ? undefined
+        : "No registry entry, so ENSIP 25 has no claim to confirm and no protected record to attempt.",
+    },
+    {
+      label: "Agent wallet",
+      done: provisioned,
+      note: provisioned
+        ? undefined
+        : "No Privy wallet, so this agent cannot hold or send anything.",
+    },
+    {
+      label: "Spend policy",
+      done: Boolean(wallet?.policy),
+      note: wallet?.policy
+        ? undefined
+        : "No policy, so there is no limit to enforce and no payment form to show.",
+    },
+  ];
+}
 
 export default async function AgentPage({
   params,
@@ -122,6 +199,26 @@ export default async function AgentPage({
           <Badge tone={verdict.tone}>{verdict.label}</Badge>
         </HStack>
       </VStack>
+
+      {/* ── What exists ────────────────────────────────────────────────── */}
+      {/*
+        Why this screen has the controls it has.
+
+        Every action below is conditional on the thing it acts on existing —
+        MCP connect needs a published endpoint, the protected-record attempt
+        needs an ENSIP 25 key, the payment form needs a provisioned wallet with
+        a policy. That is correct, and until now it was also silent: an agent
+        with none of them rendered as a page of read-only facts with no
+        explanation, which reads as a half-built screen rather than as a
+        half-provisioned agent. The two look identical and mean opposite
+        things.
+
+        So the list is stated before the sections it governs, from the same
+        reads those sections use. It is a report and not a form — the marks are
+        characters, nothing here is clickable, and an agent is provisioned by
+        the routes that provision it.
+      */}
+      <GraphCheck title="what this agent has" items={provisioning(identity, wallet)} />
 
       {/* ── Identity ───────────────────────────────────────────────────── */}
       <Frame
@@ -311,28 +408,25 @@ export default async function AgentPage({
                 </Text>
               }
             >
-              <VStack gap={2}>
-                {permissions.queries.map((q) => (
-                  <VStack key={q.cell} gap={0.5}>
-                    <Text type="code" size="2xs" wordBreak="break-all">
-                      {q.cell}
-                    </Text>
-                    <VStack gap={0} paddingInlineStart={3}>
-                      {q.resources.map((r) => (
-                        <Text
-                          key={r}
-                          type="code"
-                          size="2xs"
-                          color="secondary"
-                          wordBreak="break-all"
-                        >
-                          {r}
-                        </Text>
-                      ))}
-                    </VStack>
-                  </VStack>
-                ))}
-              </VStack>
+              {/*
+                The nesting drawn as nesting.
+
+                It was an indented list, which is the same information and
+                loses the one thing a reader needs from it: which resources
+                belong to which cell, once a cell has five of them and the next
+                begins. The branch characters make a run of long EAC resource
+                strings scannable as a shape rather than as a paragraph of
+                hex — and this is the panel that exists to let someone check a
+                denial against the resource it was derived from, so being able
+                to find the boundary is the whole point.
+              */}
+              <GraphTree
+                title="resources"
+                nodes={permissions.queries.map((q) => ({
+                  label: q.cell,
+                  children: q.resources.map((r) => ({ label: r })),
+                }))}
+              />
             </Collapsible>
           </>
         ) : (

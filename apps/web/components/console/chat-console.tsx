@@ -14,6 +14,7 @@ import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import * as React from "react";
 import type { ConsoleAnswer, ConsoleRouting, LensPlan, PlanStep } from "@nymspace/core";
+import { GraphFlow, type FlowRow } from "@/components/console/graphs";
 import { LensCard } from "@/components/console/lens-card";
 import { Loading, Outcome } from "@/components/console/primitives";
 import { apiBaseUrl, gatewayFetch } from "@/lib/api";
@@ -434,12 +435,35 @@ function TurnView({
       <ChatMessage sender="assistant">
         <ChatMessageBubble variant="ghost" width="100%">
           <Routing stage={turn.routedBy} />
-          <PlanCard
-            plan={turn.plan}
-            settled={turn.settled}
-            onRun={() => onRun(turn.plan)}
-            onCancel={() => onCancel(turn.plan)}
-          />
+          {/*
+            The figure, then the rows — the same order every answer on this
+            screen uses, and the order the opening line promises: "the answer
+            is drawn from what was read to answer it, with the rows
+            underneath". A plan is a path, so the figure is a flow.
+
+            Under `Routing` rather than above it: that line says how the
+            question was understood, which is the frame for everything below,
+            and a diagram that pushed it down the bubble would reorder the
+            reading.
+
+            Outside the card rather than inside it. `Frame` paints its corner
+            marks and its title in the surface behind it to erase the edge
+            underneath, and it is offered two surfaces, neither of which is a
+            yellow `Card`. Nested, the punch would be a body-coloured lozenge
+            sitting on amber — the exact failure `frame.tsx` documents. Out
+            here the bubble is ghost and the surface really is the body.
+          */}
+          <VStack gap={3} width="100%" className="min-w-0">
+            {isPath(turn.plan.steps.length) ? (
+              <GraphFlow title="plan" rows={planFlow(turn.plan)} />
+            ) : null}
+            <PlanCard
+              plan={turn.plan}
+              settled={turn.settled}
+              onRun={() => onRun(turn.plan)}
+              onCancel={() => onCancel(turn.plan)}
+            />
+          </VStack>
         </ChatMessageBubble>
       </ChatMessage>
     );
@@ -449,7 +473,12 @@ function TurnView({
     return (
       <ChatMessage sender="assistant">
         <ChatMessageBubble variant="ghost" width="100%">
-          <Outcomes plan={turn.plan} outcomes={turn.outcomes} />
+          <VStack gap={3} width="100%" className="min-w-0">
+            {isPath(turn.outcomes.length) ? (
+              <GraphFlow title="ran" rows={ranFlow(turn.outcomes)} />
+            ) : null}
+            <Outcomes plan={turn.plan} outcomes={turn.outcomes} />
+          </VStack>
         </ChatMessageBubble>
       </ChatMessage>
     );
@@ -578,6 +607,85 @@ function Routing({ stage }: { stage: ConsoleRouting }) {
  * that signs it, and a step expected to be refused says so in advance rather
  * than after.
  */
+/**
+ * Whether a figure is earned.
+ *
+ * One step is not a path, and drawing it as one produces a dashed frame around
+ * a single label with no arrow in it — a diagram of nothing, directly above a
+ * numbered list containing the same sentence. Most of what this console
+ * proposes is one request; the payment and the onboarding are the plans with
+ * somewhere to go, and those are the ones that get a flow.
+ *
+ * The register's own first rule, and it is a rule about restraint rather than
+ * about layout: a figure has to be worth the space it takes from the thing it
+ * summarises.
+ */
+function isPath(steps: number) {
+  return steps > 1;
+}
+
+/**
+ * A plan as a path.
+ *
+ * One row, one node per step, in the order `run` will send them — which is the
+ * fact the numbered list underneath states and the figure makes visible: how
+ * many requests this is, and that they are sequential rather than one write
+ * with a long name.
+ *
+ * The label is `step.title` unchanged. Shortening it here would put a second,
+ * quieter name for each request on the same screen as the real one, and the
+ * titles the route writes are already short phrases — "Preview against the
+ * spend limit", "Send the payment" — because they were written to be read by
+ * an operator deciding whether to approve them.
+ *
+ * Tone marks the steps that are not expected to go through. A step with
+ * `expectDenial` is a probe: the refusal is its result, and a reader looking at
+ * the path before approving it should be able to see which arrows are meant to
+ * stop. Everything else is `default` — nothing has run, so nothing has earned
+ * the accent yet.
+ */
+function planFlow(plan: LensPlan): FlowRow[] {
+  return [
+    {
+      nodes: plan.steps.map((step) => ({
+        label: step.title,
+        tone: step.expectDenial ? ("muted" as const) : ("default" as const),
+      })),
+    },
+  ];
+}
+
+/**
+ * The same path, after it ran.
+ *
+ * Deliberately the same shape as {@link planFlow} so the two figures sit one
+ * above the other in the transcript and the difference between them is the
+ * only thing that moved — the plan's path in plain ink, and then the same path
+ * with the steps that actually landed picked out in accent.
+ *
+ * A step that failed when it was not supposed to reads as `default`, the same
+ * as a step in an unrun plan. That is the register's constraint — one accent,
+ * three tones — and it is survivable here because the failure is stated
+ * immediately underneath by `Outcome`, which exists to state it with the right
+ * severity and a remedy. The figure says what happened; it is not the thing
+ * that raises the alarm.
+ */
+function ranFlow(outcomes: StepOutcome[]): FlowRow[] {
+  return [
+    {
+      nodes: outcomes.map((outcome) => ({
+        label: outcome.step.title,
+        tone:
+          outcome.denied || outcome.error
+            ? outcome.denied && outcome.step.expectDenial
+              ? ("muted" as const)
+              : ("default" as const)
+            : ("accent" as const),
+      })),
+    },
+  ];
+}
+
 function PlanCard({
   plan,
   settled,

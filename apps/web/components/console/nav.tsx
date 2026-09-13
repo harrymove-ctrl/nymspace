@@ -33,19 +33,48 @@ import { usePathname } from "next/navigation";
  * get. See the `nav-link` utility in `app/globals.css` for the mark itself.
  */
 
+/**
+ * The six links, and what each screen is called in a sentence.
+ *
+ * `subject` is not the label lowercased. It completes "Connect a wallet to use
+ * ___" for the connect gate, and a label is a tab on a strip where a subject is
+ * a noun in a clause — "use New agent" is a label pretending to be English.
+ * Keeping both here means the two can differ where they must and are renamed
+ * together where they must not drift.
+ */
 const NAV = [
-  { href: "/console", label: "Fleet" },
-  { href: "/console/new", label: "New agent" },
-  { href: "/console/discover", label: "Discover" },
-  { href: "/console/chat", label: "Chat" },
-  { href: "/console/treasury", label: "Treasury" },
-  { href: "/console/activity", label: "Activity" },
+  { href: "/console", label: "Fleet", subject: "the fleet" },
+  { href: "/console/new", label: "New agent", subject: "the new agent form" },
+  { href: "/console/discover", label: "Discover", subject: "discovery" },
+  { href: "/console/chat", label: "Chat", subject: "the console" },
+  { href: "/console/treasury", label: "Treasury", subject: "the treasury" },
+  { href: "/console/activity", label: "Activity", subject: "the activity log" },
 ] as const;
 
 const isCurrent = (pathname: string, href: string) =>
   href === "/console"
     ? pathname === href
     : pathname === href || pathname.startsWith(`${href}/`);
+
+/**
+ * What the current screen is called, for anything completing a sentence about
+ * it — today the connect gate's prompt.
+ *
+ * Derived from the same table and the same matcher the underline uses, which
+ * is the point of exporting it rather than writing a second map somewhere
+ * else: a screen renamed in `NAV` is renamed everywhere at once.
+ *
+ * A route with no entry falls back to "the console" — an agent's detail page is
+ * the one that does, since `isCurrent` matches `/console` exactly and so lights
+ * no tab there either. "Connect a wallet to use the console" is true on that
+ * page and the fallback is not worth a special case; what it must not be is
+ * blank, because every caller is completing a sentence.
+ */
+export function screenSubject(pathname: string): string {
+  return (
+    NAV.find((item) => isCurrent(pathname, item.href))?.subject ?? "the console"
+  );
+}
 
 export function ConsoleNav() {
   const pathname = usePathname();
