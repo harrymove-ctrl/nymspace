@@ -446,10 +446,30 @@ async function checkGemini(): Promise<void> {
     };
     const first = { response, body };
 
-    for (let page = 0; page < 10; page += 1) {
-      if (!response.ok || !Array.isArray(body.models)) break;
+    /**
+     * Whether the list below is all of it.
+     *
+     * A page that fails mid-walk used to break the loop and leave `response`
+     * restored to page one's success, so a 429 on page two produced a
+     * truncated list that recorded a pass — and the visibility assertions then
+     * reported a model on page three as absent. That is the same false alarm
+     * the pagination was added to remove, made quieter. An incomplete listing
+     * is now a finding of its own, and the membership tests do not run against
+     * a set that is missing pages.
+     */
+    let incomplete: string | undefined;
+
+    for (let page = 0; ; page += 1) {
+      if (!response.ok || !Array.isArray(body.models)) {
+        if (page > 0) incomplete = `page ${page + 1} answered ${response.status}`;
+        break;
+      }
       models.push(...body.models);
       if (!body.nextPageToken) break;
+      if (page + 1 >= 10) {
+        incomplete = "more than ten pages; the walk stopped before the end";
+        break;
+      }
 
       response = await fetch(`${base}&pageToken=${encodeURIComponent(body.nextPageToken)}`, {
         headers: { "x-goog-api-key": key },
@@ -479,7 +499,17 @@ async function checkGemini(): Promise<void> {
      * route means every unmatched question silently falling back to the
      * matcher, indistinguishable from a model that had nothing to say.
      */
-    if (response.ok) {
+    if (incomplete) {
+      record({
+        provider: "gemini",
+        name: "the model list is complete",
+        passed: false,
+        code: "partial",
+        detail: `${incomplete}; ${models.length} models read, so a pin beyond them cannot be checked`,
+      });
+    }
+
+    if (response.ok && !incomplete) {
       const visible = new Set(
         models
           .map((model) => (model as { name?: string }).name)
