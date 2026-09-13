@@ -1,12 +1,12 @@
 {
-  "ranAt": "2026-09-13T07:48:50.773Z",
+  "ranAt": "2026-09-13T08:06:06.926Z",
   "gate": "G",
   "go": true,
   "facts": {
     "model": "gemini-3.5-flash-lite",
     "fleetSize": 3,
-    "providerRetries": 2,
-    "questions": 9
+    "providerRetries": 4,
+    "questions": 11
   },
   "assertions": [
     {
@@ -53,6 +53,48 @@
     }
   ],
   "runs": [
+    {
+      "label": "unmatched",
+      "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
+      "status": 200,
+      "body": {
+        "kind": "unanswered",
+        "message": "I did not recognise an agent or a topic in that. I answer from live ENS, ERC 8004 and permission reads, so I can only answer about things I can go and check.",
+        "suggestions": [
+          "show me the fleet",
+          "show research",
+          "create a support agent",
+          "let research update its agent-context",
+          "as research, set agent-context to \"Specialized in ENS research\"",
+          "as research, set its mcp endpoint to https://example.com/mcp",
+          "what does research's mcp serve",
+          "pay 0.0001 ETH from research to research",
+          "show the audit trail for research"
+        ],
+        "routedBy": "matcher"
+      }
+    },
+    {
+      "label": "unmatched",
+      "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
+      "status": 200,
+      "body": {
+        "kind": "unanswered",
+        "message": "I did not recognise an agent or a topic in that. I answer from live ENS, ERC 8004 and permission reads, so I can only answer about things I can go and check.",
+        "suggestions": [
+          "show me the fleet",
+          "show research",
+          "create a support agent",
+          "let research update its agent-context",
+          "as research, set agent-context to \"Specialized in ENS research\"",
+          "as research, set its mcp endpoint to https://example.com/mcp",
+          "what does research's mcp serve",
+          "pay 0.0001 ETH from research to research",
+          "show the audit trail for research"
+        ],
+        "routedBy": "matcher"
+      }
+    },
     {
       "label": "unmatched",
       "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
@@ -203,7 +245,7 @@
             "provenance": "STORE"
           }
         ],
-        "readAt": "2026-09-13T07:48:29.820Z",
+        "readAt": "2026-09-13T08:05:48.230Z",
         "routedBy": "model"
       }
     },
@@ -324,7 +366,7 @@
             "tone": "denied"
           }
         ],
-        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T07:48:31.329Z.",
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:05:49.738Z.",
         "detail": [
           {
             "label": "Owner",
@@ -372,7 +414,7 @@
             "provenance": "CHAIN 11155111"
           }
         ],
-        "readAt": "2026-09-13T07:48:31.329Z",
+        "readAt": "2026-09-13T08:05:49.738Z",
         "routedBy": "matcher"
       }
     },
@@ -493,7 +535,7 @@
             "tone": "denied"
           }
         ],
-        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T07:48:33.586Z.",
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:05:52.116Z.",
         "detail": [
           {
             "label": "Owner",
@@ -541,7 +583,7 @@
             "provenance": "CHAIN 11155111"
           }
         ],
-        "readAt": "2026-09-13T07:48:33.586Z",
+        "readAt": "2026-09-13T08:05:52.116Z",
         "routedBy": "model"
       }
     },
@@ -662,7 +704,7 @@
             "tone": "denied"
           }
         ],
-        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T07:48:35.087Z.",
+        "caption": "7 components across 3 lanes, read from chain at 2026-09-13T08:05:53.619Z.",
         "detail": [
           {
             "label": "Owner",
@@ -710,7 +752,7 @@
             "provenance": "CHAIN 11155111"
           }
         ],
-        "readAt": "2026-09-13T07:48:35.087Z",
+        "readAt": "2026-09-13T08:05:53.619Z",
         "routedBy": "matcher"
       }
     },
@@ -962,7 +1004,7 @@
             "provenance": "STORE"
           }
         ],
-        "readAt": "2026-09-13T07:48:50.772Z",
+        "readAt": "2026-09-13T08:06:06.922Z",
         "routedBy": "matcher"
       }
     }

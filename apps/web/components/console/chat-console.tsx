@@ -632,6 +632,8 @@ function StepRow({ index, step }: { index: number; step: PlanStep }) {
           variant="ghost"
           size="sm"
           label={open ? "Hide request" : "Show request"}
+          // Disclosure, stated to the platform; see `connect-from-claude.tsx`.
+          aria-expanded={open}
           onClick={() => setOpen((was) => !was)}
         />
       </HStack>

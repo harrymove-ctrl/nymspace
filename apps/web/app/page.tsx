@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CommitActivity } from "@/components/commit-activity";
 import { LandingPreloader } from "@/components/preloader/landing-preloader";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SoundToggle } from "@/components/ui/sound";
 import { RepoStats } from "@/components/repo-stats";
 import { WordTiles } from "@/components/word-tiles";
 import { getActivity, REVALIDATE_SECONDS } from "@nymspace/github";
@@ -50,6 +51,7 @@ export default async function Home() {
           >
             Console
           </Link>
+          <SoundToggle />
           <ThemeToggle />
         </div>
       </div>
