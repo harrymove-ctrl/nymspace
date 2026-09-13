@@ -277,8 +277,11 @@ export default async function AgentPage({
           <>
             <McpConnect target={{ kind: "fleet", agentId: id }} />
             <ConnectFromClaude
-              ensName={identity.ensName}
-              label={identity.label}
+              source={{
+                kind: "fleet",
+                ensName: identity.ensName,
+                label: identity.label,
+              }}
               endpoint={identity.records.mcp}
             />
           </>

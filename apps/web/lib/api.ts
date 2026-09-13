@@ -89,14 +89,58 @@ export const api = hc<AppType>(apiBaseUrl, { fetch: gatewayFetch });
  * `denied` body, so those functions return it rather than throwing — treating a
  * refused write as an exception is the one thing `docs/11` says not to do.
  */
-function requestFailed(status: number): Error {
-  return new Error(`request failed: ${status}`);
+async function requestFailed(
+  res: { status: number; text(): Promise<string> },
+  what = "request",
+): Promise<Error> {
+  const detail = await failureDetail(res);
+  return new Error(`${what} failed: ${res.status}${detail ? ` — ${detail}` : ""}`);
+}
+
+/**
+ * The reason the API gave, when the body is the API's own failure shape.
+ *
+ * `errorHandler` in `apps/api/src/app.ts` answers every failure as
+ * `{ error, status, requestId }`, and the gateway route in this app answers its
+ * own 503 the same way. Throwing away that `error` string cost the console the
+ * only sentence that said what went wrong: a discovery outage arrived as
+ * `request failed: 502` and rendered as "Something failed" beside an action
+ * line about the subgraph, and an unset `CONSOLE_MCP_TOKEN` arrived as
+ * `request failed: 503` — a number, where the body named the variable to set.
+ *
+ * `requestId` comes along because `app.ts` calls it the handle a person copies
+ * off an error screen, and a screen that never shows it makes that untrue.
+ *
+ * Anything that is not that shape yields nothing rather than its own text. A
+ * 502 from Railway's edge is an HTML page, and pasting a page into an error box
+ * would replace "we do not know" with a wall of markup that looks like a
+ * diagnosis. The bare status is the honest answer when the body is not ours.
+ */
+async function failureDetail(res: {
+  text(): Promise<string>;
+}): Promise<string | undefined> {
+  let body: unknown;
+  try {
+    body = JSON.parse(await res.text());
+  } catch {
+    return undefined;
+  }
+  if (typeof body !== "object" || body === null) return undefined;
+
+  const { error, requestId } = body as { error?: unknown; requestId?: unknown };
+  if (typeof error !== "string" || !error) return undefined;
+
+  // Bounded: the message is remote text, and an error box is not a log viewer.
+  const message = error.length > 300 ? `${error.slice(0, 300)}…` : error;
+  return typeof requestId === "string" && requestId
+    ? `${message} (request ${requestId})`
+    : message;
 }
 
 /** Liveness, for a status indicator or a deploy check. */
 export async function fetchHealth() {
   const res = await api.health.$get();
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -109,21 +153,21 @@ export async function fetchHealth() {
  */
 export async function fetchSigners() {
   const res = await api.v1.signers.$get();
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
 /** The fleet, with each agent's five integration states separately. */
 export async function fetchAgents() {
   const res = await api.v1.agents.$get();
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
 /** Live ENS state for one agent: records, registration, verification. */
 export async function fetchIdentity(id: string) {
   const res = await api.v1.agents[":id"].identity.$get({ param: { id } });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -139,7 +183,7 @@ export async function fetchPermissions(id: string, controller?: string) {
     param: { id },
     query: { controller },
   });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -151,7 +195,7 @@ export async function grantPermission(
     param: { id },
     json: body,
   });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -170,7 +214,7 @@ export async function writeRecord(
     param: { id },
     json: body,
   });
-  if (!res.ok) throw new Error(`record write failed: ${res.status}`);
+  if (!res.ok) throw await requestFailed(res, "record write");
   return res.json();
 }
 
@@ -186,19 +230,19 @@ export type ConnectTarget =
  */
 export async function connectMcp(target: ConnectTarget) {
   const res = await api.v1.mcp.connect.$post({ json: { target } });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
 export async function verifyIdentity(id: string) {
   const res = await api.v1.agents[":id"].verify.$post({ param: { id } });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
 export async function fetchWallet(id: string) {
   const res = await api.v1.agents[":id"].wallet.$get({ param: { id } });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -213,7 +257,7 @@ export async function fetchWallet(id: string) {
  */
 export async function fetchTreasury() {
   const res = await api.v1.treasury.$get();
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -226,7 +270,7 @@ export async function previewPayment(
     param: { id },
     json: body,
   });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -239,7 +283,7 @@ export async function sendPayment(
     param: { id },
     json: body,
   });
-  if (!res.ok) throw new Error(`payment request failed: ${res.status}`);
+  if (!res.ok) throw await requestFailed(res, "payment request");
   return res.json();
 }
 
@@ -254,7 +298,7 @@ export async function approvePayment(id: string, requestId: string) {
   const res = await api.v1.agents[":id"].payments[":requestId"].approve.$post({
     param: { id, requestId },
   });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -267,7 +311,7 @@ export async function discover(body: {
   refresh?: boolean;
 }) {
   const res = await api.v1.discover.$post({ json: body });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -331,7 +375,7 @@ export async function fetchActivity(
       limit: filter.limit === undefined ? undefined : String(filter.limit),
     },
   });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -341,14 +385,14 @@ export async function fetchActivity(
  */
 export async function fetchActivitySummary() {
   const res = await api.v1.activity.summary.$get();
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
 /** The raw commit-activity payload, for anyone diffing the page against it. */
 export async function fetchCommitActivity() {
   const res = await api.v1.github.activity.$get();
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
@@ -371,13 +415,13 @@ export async function createAgent(body: {
 }) {
   const res = await api.v1.agents.$post({ json: body });
   if (res.status === 409) return res.json();
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
 
 /** The five tracks and the steps behind them, rebuilt from the activity log. */
 export async function fetchProvisioning(id: string) {
   const res = await api.v1.agents[":id"].provisioning.$get({ param: { id } });
-  if (!res.ok) throw requestFailed(res.status);
+  if (!res.ok) throw await requestFailed(res);
   return res.json();
 }
