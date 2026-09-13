@@ -360,3 +360,29 @@ half-walked.
   apart are supposed to disagree about. Timestamps are blanked rather than the
   caption dropped, because the caption is exactly where a model sentence would
   land
+
+## 17. A fourth review pass
+
+One finding, and one hypothesis disproved rather than reported.
+
+- [x] 17.1 The clearing case from 16.1 was threaded into the plan's title and
+  summary and left out of the three other places the card composes with
+  `allowed`. `verb` put "Clear" ahead of the permission check, so a clear the
+  resolver will refuse was titled the same as one that lands — losing the word
+  "Attempt" that every other refused write carries, on the one screen whose
+  whole job is showing what will happen before it happens. The step title said
+  "set" for a clear, and the permitted closing said "the record is on chain"
+  about a record that had just been emptied. `allowed` decides the verb now and
+  `clearing` only picks which permitted verb.
+
+  The test written in 16.1 is how this got through: the fixture's `canSetText`
+  returns `false`, so it ran the *refused* path while asserting the permitted
+  wording. `chatApp` takes the grant as a parameter now and both halves are
+  covered.
+
+- [x] 17.2 Not reported, because it was tested and did not hold: the startup
+  failure in 16.2 writes its line and calls `process.exit(1)`, which Node's own
+  documentation warns can truncate a piped stdout. Piping 60KB through a
+  process that exits immediately loses nothing — `process.stdout.write` is
+  synchronous for pipes on Linux and macOS, asynchronous only on Windows, and
+  the deployment is Linux. A plausible failure is not a failure

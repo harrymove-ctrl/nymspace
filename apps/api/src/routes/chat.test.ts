@@ -35,14 +35,14 @@ const ADDRESS = "0x0000000000000000000000000000000000000001";
  * An ENS service that answers every read with nothing and records what it
  * was asked, so a test can say "the chat touched no chain" and mean it.
  */
-function recordingEns(calls: string[]) {
+function recordingEns(calls: string[], canSetText = false) {
   return new Proxy(
     {},
     {
       get(_, key) {
         return async () => {
           calls.push(String(key));
-          if (key === "canSetText") return false;
+          if (key === "canSetText") return canSetText;
           if (key === "findOwner" || key === "getResolver") return ADDRESS;
           return "";
         };
@@ -91,6 +91,9 @@ function chatApp(
   authority: (Omit<typeof AUTHORITY, "policyId"> & { policyId?: string }) | null =
     AUTHORITY,
   chatRouter?: ChatRouter,
+  // Whether the controller holds SET_TEXT. `false` is the fixture's default
+  // because the demo's proof is a refusal; a permitted write needs to say so.
+  canSetText = false,
 ) {
   const deps = {
     chatRouter,
@@ -101,7 +104,7 @@ function chatApp(
       listActivity: async () => [],
       getFinancialAuthority: async () => authority ?? undefined,
     },
-    ens: recordingEns(calls),
+    ens: recordingEns(calls, canSetText),
     config: { chainId: 11155111 },
     registry: ADDRESS,
     organization: ADDRESS,
@@ -411,26 +414,55 @@ describe("the log", () => {
 });
 
 describe("clearing a record", () => {
-  it("reads as a plan to clear, not a plan to publish a placeholder", async () => {
-    const answer = await ask(
-      "take the endpoint off that one entirely",
-      [],
-      fakeRouter({
-        kind: "call",
-        tool: "plan_record_write",
-        call: {
-          tool: "plan_record_write",
-          agentId: "agent-research",
-          recordKey: "mcp",
-          value: "",
-        },
-        elapsedMs: 11,
+  const clearPlan = fakeRouter({
+    kind: "call",
+    tool: "plan_record_write",
+    call: {
+      tool: "plan_record_write",
+      agentId: "agent-research",
+      recordKey: "mcp",
+      value: "",
+    },
+    elapsedMs: 11,
+  });
+
+  /**
+   * Both halves, because the card composes the two and the first version of
+   * this test only ran one of them — and ran it against the *refused* fixture
+   * while asserting the permitted wording, which is how "Clear" ended up on a
+   * write the resolver was going to reject.
+   */
+  async function clearWith(canSetText: boolean) {
+    const res = await chatApp([], AUTHORITY, clearPlan, canSetText).fetch(
+      new Request("http://api.test/v1/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "take the endpoint off that one entirely" }),
       }),
     );
+    expect(res.status).toBe(200);
+    return res.json();
+  }
+
+  it("is a plan to clear, not a plan to publish a placeholder", async () => {
+    const answer = await clearWith(true);
 
     expect(answer.kind).toBe("plan");
     expect(answer.title).toMatch(/^Clear /);
+    expect(answer.steps[0].title).toMatch(/^Clear /);
+    expect(answer.closing).toContain("empty");
     // The value that reaches the route is the empty one, not example.com.
+    expect(answer.steps[0].body.value).toBe("");
+  });
+
+  it("still says a refused clear will be refused", async () => {
+    const answer = await clearWith(false);
+
+    // Every write the resolver will reject is titled "Attempt". A clear is not
+    // the exception, or the title stops separating the two outcomes.
+    expect(answer.title).toMatch(/^Attempt /);
+    expect(answer.steps[0].title).toBe("Try to clear agent-endpoint[mcp]");
+    expect(answer.steps[0].expectDenial).toBeTruthy();
     expect(answer.steps[0].body.value).toBe("");
   });
 });
