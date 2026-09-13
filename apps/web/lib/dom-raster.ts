@@ -19,8 +19,13 @@
  *
  * ## What it is and is not
  *
- * It is not a renderer. It has no gradients, no shadows, no transforms, no
- * stacking-context ordering beyond tree order, no images. It is a faithful
+ * It is not a renderer. It has no gradients, no shadows, no transforms and no
+ * stacking-context ordering beyond tree order. It draws images and inline SVG,
+ * which it did not when this was written for DecryptReveal alone: that list was
+ * meant as things to add when a screen needed them, and Bend needed them. It
+ * covers the whole console rather than one revealed circle, and the console's
+ * header carries two icons that are inline SVG — silhouetted, they came out as
+ * empty circles on every screen. It is otherwise a faithful
  * *silhouette*: ink where the UI has ink, in the colour the UI has it, at the
  * position the UI has it — which is precisely and only what the glyph matcher
  * reads. A shadow the raster omits changes no glyph.
@@ -46,6 +51,107 @@ const SKIPPED = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"]);
 
 const TRANSPARENT = /^(transparent|rgba\(0,\s*0,\s*0,\s*0\))$/;
 
+/**
+ * The properties that decide what an SVG shape looks like.
+ *
+ * Copied onto a clone before serialising, because a serialised SVG leaves the
+ * document behind and with it every stylesheet: `stroke="currentColor"` has no
+ * colour to inherit, and a `class` that shaped the icon matches no rule. The
+ * computed values have already resolved both, so inlining them is what makes
+ * the copy look like the original rather than like its markup.
+ *
+ * `mask` and `clip-path` are deliberately absent. Both travel as attributes
+ * that serialisation keeps, pointing at defs it also keeps, and writing the
+ * computed form on top of a working attribute is the one way to break them.
+ */
+const SVG_PAINT = [
+  "fill", "fill-opacity", "fill-rule",
+  "stroke", "stroke-width", "stroke-opacity",
+  "stroke-linecap", "stroke-linejoin",
+  "stroke-dasharray", "stroke-dashoffset",
+  "opacity", "color", "display", "visibility",
+  "transform", "transform-origin",
+  "font-family", "font-size", "font-weight", "text-anchor",
+];
+
+/**
+ * How many distinct rasterised icons to keep.
+ *
+ * Keyed on the serialised markup, so an icon mid-animation is a new key on
+ * every frame it changes — bounded rather than unbounded, because the console's
+ * sound toggle animates its own paths and would otherwise hold every frame of
+ * that animation for the life of the page.
+ */
+const SVG_CACHE_LIMIT = 64;
+
+/**
+ * A colour stop with a position, which is all a dash is made of.
+ *
+ * `repeating-linear-gradient(colour 0px, colour 2px, transparent 2px,
+ * transparent 7px)` is how the console draws every dashed edge and rule it has
+ * — the frame's four sides, `frame-rule`, `frame-rule-below`. Computed, the
+ * stops always arrive as absolute pixels, which is why this matches `px` and
+ * nothing else.
+ */
+const GRADIENT_STOP = /(rgba?\([^)]*\))\s+(-?[\d.]+)px/g;
+
+const CLEAR = /^rgba?\([^)]*,\s*0\)$/;
+
+/** Split a comma-separated CSS list without splitting inside `rgb(...)`. */
+function splitList(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (c === "(") depth++;
+    else if (c === ")") depth--;
+    else if (c === "," && depth === 0) {
+      parts.push(value.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts;
+}
+
+/**
+ * A CSS length against the basis a percentage would resolve to.
+ *
+ * `auto` and anything unparseable fall back to the basis, which is what a
+ * background layer with no explicit size does.
+ */
+function lengthOf(token: string | undefined, basis: number): number {
+  if (!token) return basis;
+  if (token.endsWith("%")) return (parseFloat(token) / 100) * basis;
+  const value = parseFloat(token);
+  return Number.isFinite(value) ? value : basis;
+}
+
+/** The dash a repeating gradient describes, or null if it describes something else. */
+function dashOf(layer: string) {
+  if (!layer.startsWith("repeating-linear-gradient")) return null;
+  GRADIENT_STOP.lastIndex = 0;
+  let colour = "";
+  let dash = 0;
+  let period = 0;
+  let match: RegExpExecArray | null;
+  while ((match = GRADIENT_STOP.exec(layer))) {
+    const [, stopColour, offset] = match;
+    const at = parseFloat(offset!);
+    period = Math.max(period, at);
+    if (CLEAR.test(stopColour!)) {
+      // The first transparent stop is where the ink stops, and so is the length
+      // of the dash. Stops before it are all the same colour in this vocabulary.
+      if (!dash) dash = at;
+    } else if (!colour) {
+      colour = stopColour!;
+    }
+  }
+  if (!colour || period <= 0) return null;
+  return { colour, dash: dash || period, period };
+}
+
 export interface DomRaster {
   /** The texture. Resized by {@link DomRaster.paint}. */
   readonly canvas: HTMLCanvasElement;
@@ -59,10 +165,64 @@ export interface DomRaster {
 export function createDomRaster(
   root: HTMLElement,
   background: string,
+  /**
+   * Called once when an image this paint had to skip has finished decoding.
+   *
+   * An `<img>` or an inline SVG is not ready the instant it is first asked for,
+   * and a caller that repaints only on its own schedule would keep the version
+   * without it. Optional: DecryptReveal repaints under a moving cursor and will
+   * come back on its own.
+   */
+  onReady?: () => void,
 ): DomRaster | null {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) return null;
+
+  /* Serialised markup to the image decoding it. A value that is present but not
+     yet `complete` is in flight; `paint` skips it and `onReady` brings the
+     caller back. */
+  const svgCache = new Map<string, HTMLImageElement>();
+
+  function inlinePaint(source: Element, clone: Element) {
+    const style = getComputedStyle(source);
+    let inline = "";
+    for (const property of SVG_PAINT) {
+      const value = style.getPropertyValue(property);
+      if (value) inline += `${property}:${value};`;
+    }
+    clone.setAttribute("style", inline);
+    const from = source.children;
+    const to = clone.children;
+    for (let i = 0; i < from.length && i < to.length; i++) {
+      inlinePaint(from[i]!, to[i]!);
+    }
+  }
+
+  function svgImage(element: SVGSVGElement, rect: DOMRect) {
+    const clone = element.cloneNode(true) as SVGSVGElement;
+    inlinePaint(element, clone);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", String(rect.width));
+    clone.setAttribute("height", String(rect.height));
+    if (!clone.getAttribute("viewBox")) {
+      clone.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
+    }
+
+    const markup = new XMLSerializer().serializeToString(clone);
+    const cached = svgCache.get(markup);
+    if (cached) return cached.complete && cached.naturalWidth > 0 ? cached : null;
+
+    const image = new Image();
+    image.addEventListener("load", () => onReady?.(), { once: true });
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+    svgCache.set(markup, image);
+    if (svgCache.size > SVG_CACHE_LIMIT) {
+      const oldest = svgCache.keys().next().value;
+      if (oldest !== undefined) svgCache.delete(oldest);
+    }
+    return null;
+  }
 
   /*
     One range, reused for every text node in every repaint.
@@ -137,6 +297,69 @@ export function createDomRaster(
     range.selectNodeContents(node);
   }
 
+  /**
+   * The console's edges and rules, which are background images rather than
+   * borders.
+   *
+   * `frame-edge` paints four one-pixel repeating gradients — one per side,
+   * placed and sized by `background-position` and `background-size` — because a
+   * dashed CSS border cannot be notched by the title sitting over it. That is
+   * the register's whole look, and a silhouette that drew only
+   * `background-color` erased every frame on the screen the moment the fold
+   * covered the live DOM.
+   *
+   * Only the repeating form is drawn, deliberately. It is the one the console
+   * uses for a line, it maps exactly onto `setLineDash`, and a general gradient
+   * painter would be a renderer — which the note at the top of this file says
+   * this is not.
+   */
+  function paintRules(
+    style: CSSStyleDeclaration,
+    rect: DOMRect,
+    x: number,
+    y: number,
+  ) {
+    const image = style.backgroundImage;
+    if (!image || image === "none") return;
+
+    const layers = splitList(image);
+    const sizes = splitList(style.backgroundSize);
+    const positions = splitList(style.backgroundPosition);
+
+    for (let i = 0; i < layers.length; i++) {
+      const dash = dashOf(layers[i]!);
+      if (!dash) continue;
+
+      const size = (sizes[i] ?? sizes[0] ?? "auto").split(/\s+/);
+      const width = lengthOf(size[0], rect.width);
+      const height = lengthOf(size[1], rect.height);
+      if (width < 0.5 || height < 0.5) continue;
+
+      /* A percentage position resolves against the space the layer does not
+         fill, which is what puts `100% 0` on the right-hand edge rather than
+         one pixel past it. */
+      const position = (positions[i] ?? positions[0] ?? "0px 0px").split(/\s+/);
+      const left = x + lengthOf(position[0], rect.width - width);
+      const top = y + lengthOf(position[1], rect.height - height);
+
+      ctx!.save();
+      ctx!.strokeStyle = dash.colour;
+      ctx!.setLineDash([dash.dash, dash.period - dash.dash]);
+      ctx!.beginPath();
+      if (width >= height) {
+        ctx!.lineWidth = height;
+        ctx!.moveTo(left, top + height / 2);
+        ctx!.lineTo(left + width, top + height / 2);
+      } else {
+        ctx!.lineWidth = width;
+        ctx!.moveTo(left + width / 2, top);
+        ctx!.lineTo(left + width / 2, top + height);
+      }
+      ctx!.stroke();
+      ctx!.restore();
+    }
+  }
+
   function paintBox(
     element: Element,
     style: CSSStyleDeclaration,
@@ -183,6 +406,52 @@ export function createDomRaster(
       trace();
       ctx!.stroke();
     }
+
+    paintRules(style, rect, x, y);
+  }
+
+  /**
+   * An image, or an inline SVG, drawn at the box layout gave it.
+   *
+   * Returns whether the element was one — the caller stops there either way for
+   * an SVG, because its children are shapes rather than boxes and the silhouette
+   * walk below would paint their bounding rectangles as if they were.
+   */
+  function paintGraphic(element: Element, origin: DOMRect): boolean {
+    if (element instanceof SVGSVGElement) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 0.5 || rect.height < 0.5) return true;
+      const image = svgImage(element, rect);
+      if (image) {
+        ctx!.drawImage(
+          image,
+          rect.left - origin.left,
+          rect.top - origin.top,
+          rect.width,
+          rect.height,
+        );
+      }
+      return true;
+    }
+
+    if (element instanceof HTMLImageElement) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 0.5 || rect.height < 0.5) return true;
+      if (element.complete && element.naturalWidth > 0) {
+        ctx!.drawImage(
+          element,
+          rect.left - origin.left,
+          rect.top - origin.top,
+          rect.width,
+          rect.height,
+        );
+      } else {
+        element.addEventListener("load", () => onReady?.(), { once: true });
+      }
+      return true;
+    }
+
+    return false;
   }
 
   function walk(node: Node, origin: DOMRect) {
@@ -209,6 +478,7 @@ export function createDomRaster(
     }
 
     paintBox(element, style, origin);
+    if (paintGraphic(element, origin)) return;
     for (const child of element.childNodes) walk(child, origin);
   }
 
