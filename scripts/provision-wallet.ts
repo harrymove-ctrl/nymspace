@@ -1,8 +1,7 @@
 /**
- * Give the research agent a wallet under one enforceable policy — tasks 5.2
- * through 5.5.
+ * Give an agent a wallet under one enforceable policy — tasks 5.2 through 5.5.
  *
- * Run: pnpm provision:wallet
+ * Run: pnpm provision:wallet [agent-id]     (defaults to agent-research)
  *
  * The order is the point. The policy is created before the wallet so the wallet
  * is governed from its first block rather than from whenever an attach call
@@ -33,7 +32,17 @@ import {
 import { Store, closeDatabase, database, migrate } from "@nymspace/store";
 
 const ORGANIZATION_ID = "nymspace";
-const AGENT_DB_ID = "agent-research";
+/**
+ * Which agent gets the wallet.
+ *
+ * An argument rather than a constant, and the default keeps every existing
+ * invocation behaving as it did. It was hardcoded to `agent-research`, which
+ * meant a second funded agent could not be created at all — and without one,
+ * "pay agent A from agent B" is a sentence this product can describe and never
+ * demonstrate. Every peer shares one controller address, so the only address
+ * that identifies a payee is a wallet of its own.
+ */
+const AGENT_DB_ID = process.argv[2] ?? "agent-research";
 const BASE_SEPOLIA = 84532;
 
 /**
