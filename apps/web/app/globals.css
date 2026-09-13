@@ -860,3 +860,51 @@ html::-webkit-scrollbar {
     transition: none;
   }
 }
+
+/* ── Bend ─────────────────────────────────────────────────────────────────
+   A region that scrolls on the face of a cube.
+
+   The effect is `lib/bend/bend-vanilla.ts` and the component is
+   `components/console/bend.tsx`; these three utilities are the geometry that
+   has to live in CSS, and nothing else about the effect does.
+
+   `--bend-height` is set on the host by the component, because the cap is a
+   caller's number rather than a token — the same arrangement `scroll-shell`
+   uses for `--scroll-edge-surface`. What the property *means* is decided here
+   and only here.
+
+   A cap rather than a height, deliberately. A frame shorter than its cap keeps
+   the height it had, does not scroll, and so never folds; `bend-vanilla.ts`
+   leaves it as live DOM rather than covering it with the canvas. The console
+   changes only where there was already something to scroll. */
+
+@utility bend-host {
+  position: relative;
+  max-height: var(--bend-height);
+}
+
+/* The html-in-canvas path only. There the content sits inside an absolutely
+   positioned <canvas> and contributes no height for a cap to apply to, so the
+   region needs a definite one. */
+@utility bend-host-fixed {
+  height: var(--bend-height);
+}
+
+/* The scroller, as a flex child of a capped column: `min-height: 0` because a
+   flex item's `auto` minimum is its content, which would push the host past
+   its own cap and leave nothing to scroll. */
+@utility bend-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+}
+
+/* The same scroller inside the canvas, where the box is already definite. */
+@utility bend-scroll-full {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}

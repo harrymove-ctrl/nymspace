@@ -84,6 +84,25 @@ const ROWS: Row[] = [
   { name: "specimen-three.invalid", chain: "—", readAt: "—" },
 ];
 
+/**
+ * Ruler marks for the fold, not rows.
+ *
+ * `Frame` folds its contents over a virtual edge once there is more of them
+ * than fits, and every other frame on this page is shorter than that — so
+ * without this one the effect cannot be looked at anywhere the API is not
+ * running. See `components/console/bend.tsx`.
+ *
+ * Evenly spaced and numbered on purpose. The fold is a change in spacing, and
+ * a column of identical baselines is the only thing that makes a change in
+ * spacing legible; prose would hide it in its own ragged edge. They are marks
+ * rather than invented agents for the reason the rest of this file is careful
+ * about — each one says what it is.
+ */
+const BEND_SPECIMEN = Array.from(
+  { length: 44 },
+  (_, index) => `specimen line ${String(index + 1).padStart(3, "0")} — not a read`,
+);
+
 const COLUMNS: TableColumn<Row>[] = [
   { key: "name", header: "agent", width: proportional(2), sortable: true },
   { key: "chain", header: "chain", width: proportional(1), sortable: true },
@@ -148,6 +167,29 @@ export default function AstryxCheck() {
         subtitle="Default surface. Sorting and selection both run inside the frame."
       >
         <ProofTable />
+      </Frame>
+
+      {/*
+        The fold, which does not exist until there is something to scroll.
+
+        This is the one frame on the page tall enough to reach its own cap, so
+        it is the one that demonstrates what `Frame` now does. The frames above
+        and below it are shorter than the cap and are therefore untouched —
+        that contrast is the other half of what this specimen shows, and it is
+        the behaviour worth checking here: the effect must not change a frame
+        that had nothing to scroll.
+      */}
+      <Frame
+        title="bend"
+        subtitle="Scroll inside this frame. The top and bottom fold over a virtual edge and flatten back out at each scroll end; the marks below are evenly spaced, so the fold reads as their spacing closing up."
+      >
+        <VStack gap={2} width="100%">
+          {BEND_SPECIMEN.map((line) => (
+            <Text key={line} type="code" size="sm">
+              {line}
+            </Text>
+          ))}
+        </VStack>
       </Frame>
 
       <Card>

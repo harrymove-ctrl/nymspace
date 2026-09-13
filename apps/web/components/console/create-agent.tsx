@@ -468,7 +468,11 @@ export function CreateAgent({ parentName }: { parentName: string }) {
 
   return (
     <VStack gap={6} width="100%" className="min-w-0">
+      {/* A form, and a form is filled top to bottom rather than read. The
+          bent face replaces the live DOM while it moves, which would take the
+          caret and the focus ring with it mid-scroll. */}
       <Frame
+        bend={false}
         title="new agent"
         subtitle={`A subname under ${parentName}, its records, and — if you delegate — one grant per endpoint key. Signed by the organization.`}
       >
