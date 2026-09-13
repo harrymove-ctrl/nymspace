@@ -346,8 +346,23 @@ function readOutcome(
 
   // The evidence each route actually returns, in the order it is worth seeing.
   const tx = body["transaction"];
+
+  /*
+    Two shapes, because two routes answer differently and both are right.
+
+    A record write returns `transaction: { hash }`; a payment returns
+    `transactionHash` flat, because Privy's adapter result is spread into the
+    response and that is the field it carries. Reading only the first meant the
+    step that moves money rendered as "done" with nothing under it — the one
+    moment in this console where a reader most needs the hash, and the only one
+    that withheld it. A demo cannot ask to be trusted at exactly the point it
+    stops showing evidence.
+  */
   const hash =
-    tx && typeof tx === "object" && "hash" in tx ? String(tx.hash) : undefined;
+    (tx && typeof tx === "object" && "hash" in tx ? String(tx.hash) : undefined) ??
+    (typeof body["transactionHash"] === "string"
+      ? body["transactionHash"]
+      : undefined);
   const evidence =
     hash ??
     (typeof body["after"] === "string" ? body["after"] : undefined) ??

@@ -193,7 +193,7 @@ export function chatToolDeclarations(fleet: RouterFleet): {
     {
       name: "show_audit",
       description:
-        "Show one agent's lifecycle from the activity log, oldest first, including every denial. Use for questions about history, what happened, or what was refused.",
+        "Show one agent's lifecycle from the activity log, oldest first, including every denial. Use for questions about its logs, activity, events, history, what happened to it, what it has done, or what was refused — anything asking about the past rather than the present state. Prefer this over show_agent whenever the question is about events rather than about what the agent is right now.",
       parameters: object({ agentId: agentParam }, ["agentId"]),
       needsFleet: true,
     },

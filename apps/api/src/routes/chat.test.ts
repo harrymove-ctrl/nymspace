@@ -466,3 +466,30 @@ describe("clearing a record", () => {
     expect(answer.steps[0].body.value).toBe("");
   });
 });
+
+describe("the words people reach for", () => {
+  /**
+   * `logs`, `activity` and `events` were missing from the audit branch, so
+   * "show research logs" fell through to the agent lens — the same agent, the
+   * wrong answer, and nothing on screen saying it had been misunderstood.
+   */
+  it("treats logs, activity and events as the audit trail", async () => {
+    for (const message of [
+      "show research logs",
+      "show me the activity for research",
+      "what events does research have",
+      "research audit trail",
+    ]) {
+      const answer = await ask(message);
+      expect(answer.title, message).toBe("research.nymspace.eth — audit trail");
+      expect(answer.routedBy, message).toBe("matcher");
+    }
+  });
+
+  it("still sends a plain question about the agent to the agent lens", async () => {
+    // The widening must not swallow this: it is the pair the branch order
+    // exists to separate.
+    const answer = await ask("show research");
+    expect(answer.title).toBe("research.nymspace.eth");
+  });
+});

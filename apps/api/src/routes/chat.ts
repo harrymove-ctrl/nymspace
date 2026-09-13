@@ -135,7 +135,17 @@ async function match(message: string, deps: Deps): Promise<ConsoleBody | undefin
   const plan = await matchPlan(text, message, deps);
   if (plan) return plan;
 
-  if (/\b(audit|trail|history|timeline|what happened)\b/.test(text)) {
+  /*
+    `logs`, `activity` and `events` are the words people reach for first.
+
+    They were missing, so "show research logs" fell through to the agent lens —
+    the same agent, the wrong answer, and no sign anything had been
+    misunderstood. Widening here rather than leaving it to the routing stage is
+    deliberate: this branch only fires when a sentence also names an agent, so
+    it stays a deterministic function of the message and takes nothing the
+    model would otherwise get to decide.
+  */
+  if (/\b(audit|trail|history|timeline|logs?|activity|events?|what happened)\b/.test(text)) {
     const id = await matchAgent(text, deps);
     if (id) return auditLens(id, deps);
   }
