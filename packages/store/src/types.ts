@@ -188,12 +188,33 @@ export interface FinancialAuthorityRef {
  * an agent whose Graph indexing is pending is still fully usable for every
  * identity proof. A single enum spanning all five could not say either thing.
  */
-export type EnsProvisioning = "draft" | "pending" | "active" | "failed";
+/**
+ * `retired` is an end state, not a failure.
+ *
+ * An agent whose name has been given up is not a provisioning run that went
+ * wrong, and collapsing the two would put every offboarded agent in the same
+ * column as the ones that broke — on the fleet screen, which exists to show
+ * which integration is incomplete.
+ */
+export type EnsProvisioning =
+  | "draft"
+  | "pending"
+  | "active"
+  | "retired"
+  | "failed";
 
+/**
+ * `deregistered` is distinct from `unregistered` for the same reason.
+ *
+ * One says the registration was never made; the other says it was made and
+ * then withdrawn. The registry can tell them apart and so must this, because
+ * the second one has a transaction behind it and the first one does not.
+ */
 export type Erc8004Provisioning =
   | "unregistered"
   | "pending"
   | "registered"
+  | "deregistered"
   | "failed";
 
 export type GraphProvisioning =
@@ -246,6 +267,8 @@ export type ActivityType =
   | "ens.permission.revoked"
   | "ens.record.updated"
   | "ens.action.denied"
+  | "ens.agent.deregistered"
+  | "ens.agent.controller_updated"
   | "erc8004.registered"
   | "ensip25.verified"
   | "ensip25.failed"

@@ -57,19 +57,39 @@ function workspaceManifests(): string[] {
  * conditions. `next dev` is excluded because Next sets its own conditions; a
  * bare `tsc` or `vitest` is excluded because neither takes an entrypoint this
  * way. Vitest resolves conditions through its own config instead.
+ *
+ * Build *output* is excluded too. A bundle has its conditions resolved at the
+ * moment it was built — `server-only` is already gone from `dist/index.js`,
+ * replaced by whatever the bundler picked — so a runtime flag there changes
+ * nothing and asserting on it would be a check nobody could act on.
  */
-function runsSourceEntrypoint(command: string): boolean {
+function entrypointOf(command: string): string | undefined {
   const tokens = command.split(/\s+/).filter(Boolean);
   const runtimeIndex = tokens.findIndex((token) => RUNTIMES.includes(token));
-  if (runtimeIndex === -1) return false;
+  if (runtimeIndex === -1) return undefined;
 
   return tokens
     .slice(runtimeIndex + 1)
-    .some((token) => /\.(ts|tsx|mts|js|mjs)$/.test(token));
+    .find((token) => /\.(ts|tsx|mts|js|mjs)$/.test(token) && !/(^|\/)dist\//.test(token));
 }
 
-function hasCondition(command: string): boolean {
-  return command.includes(REQUIRED_FLAG);
+/**
+ * True when the condition is handled, by the command or by the entrypoint.
+ *
+ * The flag is the usual way. The other way is a file that configures the
+ * condition itself — `apps/api/scripts/build.mjs` passes
+ * `conditions: ["react-server"]` to esbuild, which is where it has to be,
+ * because esbuild resolves the app's imports rather than Node — and a flag on
+ * that script would be decoration. Reading the entrypoint is how this check
+ * tells "handled somewhere else" from "forgotten", which is the whole thing it
+ * is for.
+ */
+function hasCondition(command: string, entrypoint: string, manifestPath: string): boolean {
+  if (command.includes(REQUIRED_FLAG)) return true;
+
+  const file = resolve(dirname(manifestPath), entrypoint);
+  if (!existsSync(file)) return false;
+  return readFileSync(file, "utf8").includes("react-server");
 }
 
 const offences: Offence[] = [];
@@ -82,9 +102,10 @@ for (const manifestPath of workspaceManifests()) {
   };
 
   for (const [scriptName, command] of Object.entries(manifest.scripts ?? {})) {
-    if (!runsSourceEntrypoint(command)) continue;
+    const entrypoint = entrypointOf(command);
+    if (!entrypoint) continue;
     checked++;
-    if (hasCondition(command)) continue;
+    if (hasCondition(command, entrypoint, manifestPath)) continue;
 
     offences.push({
       packageName: manifest.name ?? manifestPath,

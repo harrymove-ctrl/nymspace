@@ -37,6 +37,22 @@ export const permissionGrantSchema = z.object({
 });
 
 /**
+ * Who the agent's controller becomes.
+ *
+ * One field, and it is an address rather than a name: the controller is the
+ * account the resolver checks roles for, and a name would have to be resolved
+ * to an address before it meant anything — by this route, at which point the
+ * route is deciding which account holds an agent's authority from a string.
+ *
+ * The grant itself is not touched here. Moving the controller in the store and
+ * moving the role on chain are different acts by different authorities, and
+ * `POST /:id/permissions` is the one that does the second.
+ */
+export const controllerUpdateSchema = z.object({
+  controller: addressSchema,
+});
+
+/**
  * A record write, with one rule about one key.
  *
  * An MCP endpoint must be https, checked here so a local `http://localhost`
