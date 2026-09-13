@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ConsolePreloader } from "@/components/reality-split/console-preloader";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SoundEffects } from "@/components/ui/sound";
 import "./globals.css";
@@ -90,6 +91,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             the choice lives in `localStorage`, so it survives the reload.
           */}
           <SoundEffects>{children}</SoundEffects>
+          {/*
+            Mounted by the layout rather than by the landing page, because the
+            overlay has to outlive the navigation it covers: rendered from the
+            page it would unmount the moment the router left `/`. It renders
+            nothing until the Console link fires its event.
+          */}
+          <ConsolePreloader />
         </ThemeProvider>
       </body>
     </html>
