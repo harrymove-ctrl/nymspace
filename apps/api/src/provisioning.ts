@@ -253,6 +253,18 @@ export async function provisionAgent(
     controllerAddress: target.controller,
   });
 
+  /*
+    Pending for the length of the run, repairs included.
+
+    The track is what `GET /:id/provisioning` answers `complete` from, and a
+    second submission of an agent that is already active left it active — so
+    the screen reported a finished run at the first poll and stopped asking,
+    while this function was still writing. The end of this function sets it
+    again from a full read-back; until then the honest answer is that the
+    chain state is being re-derived and not yet known.
+  */
+  await store.setProvisioning(agentId, { ens: "pending" });
+
   if (sameAddress(existingOwner, ZERO_ADDRESS)) {
     const expiry = BigInt(Math.floor(Date.now() / 1000)) + EXPIRY_SECONDS;
     try {
@@ -456,6 +468,30 @@ export async function provisionAgent(
         ok: false,
         skipped: false,
         detail: messageOf(error),
+      });
+
+      /*
+        Logged, like every other outcome of this run.
+
+        The failure used to live only in the returned `steps`, which nothing
+        durable reads: `GET /:id/provisioning` rebuilds from the activity log,
+        so a reload turned a record write that failed into a row that had never
+        existed. The create screen then showed a step with no transaction,
+        which is what a skipped step looks like — a failure rendered as
+        "already on chain".
+      */
+      await store.recordEvent({
+        organizationId: ctx.organizationId,
+        agentId,
+        source: "ens",
+        type: "ens.record.updated",
+        status: "failed",
+        occurredAt: now(),
+        actor: organization,
+        txHash: ZERO_HASH,
+        summary: `Writing ${record.key} on ${ensName} failed`,
+        evidence: { source: "ens", txHash: ZERO_HASH, contractAddress: resolver },
+        metadata: { phase: PROVISIONING_PHASE, key: record.key, reason: messageOf(error) },
       });
     }
   }

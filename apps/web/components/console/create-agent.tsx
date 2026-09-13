@@ -39,13 +39,174 @@ import { Badge, Frame, Loading, Outcome } from "./primitives";
  */
 
 type Progress = Awaited<ReturnType<typeof fetchProvisioning>>;
+type Step = Progress["steps"][number];
+
+/**
+ * What a row is doing right now.
+ *
+ * `done` is the only one backed by an event. The other three are this screen
+ * reasoning about a write that has not happened, which is why none of them
+ * renders a transaction, a read-back, or a result — a row may say it is
+ * waiting, and may not say how it turned out.
+ */
+type RowState = "done" | "running" | "queued" | "unspent";
 
 interface StepRow extends Record<string, unknown> {
   id: string;
   what: string;
   status: string;
+  state: RowState;
   txHash: string | null;
   readBack: string | null;
+}
+
+/** The record keys `provisionAgent` writes, spelled the way `keys.ts` builds them. */
+const ENDPOINT_KEY = {
+  mcp: "agent-endpoint[mcp]",
+  a2a: "agent-endpoint[a2a]",
+} as const;
+
+const CONTEXT_KEY = "agent-context";
+
+type PlanKind = "register" | "resolver" | "record" | "grant";
+
+interface PlanRow {
+  id: string;
+  kind: PlanKind;
+  /** The record key this row lands on, for the two kinds that have one. */
+  key: string | null;
+  what: string;
+}
+
+/**
+ * The writes this submission asks for, listed before any of them happen.
+ *
+ * Without it the screen showed nothing for the ten-odd seconds between the
+ * request and the first confirmation — a form that had visibly accepted
+ * something and then reported no work at all. The plan is derived from the same
+ * three inputs `provisionAgent` derives its own work from, so it is what was
+ * asked for rather than a guess at what the server will do.
+ *
+ * It is never evidence. A planned row carries no transaction and no read-back
+ * until an event arrives to fill it, because the whole argument of this screen
+ * is that a step is only done when the chain has been read back afterwards.
+ */
+function planFor(input: {
+  ensName: string;
+  mcp: string;
+  a2a: string;
+  delegate: boolean;
+}): PlanRow[] {
+  const endpoints = (["mcp", "a2a"] as const).filter(
+    (protocol) => input[protocol],
+  );
+
+  const rows: Omit<PlanRow, "id">[] = [
+    { kind: "register", key: null, what: `Register ${input.ensName}` },
+    { kind: "resolver", key: null, what: "Attach the permissioned resolver" },
+    { kind: "record", key: CONTEXT_KEY, what: `Write ${CONTEXT_KEY}` },
+    ...endpoints.map((protocol) => ({
+      kind: "record" as const,
+      key: ENDPOINT_KEY[protocol],
+      what: `Write ${ENDPOINT_KEY[protocol]}`,
+    })),
+    ...(input.delegate
+      ? endpoints.map((protocol) => ({
+          kind: "grant" as const,
+          key: ENDPOINT_KEY[protocol],
+          what: `Grant SET_TEXT on ${ENDPOINT_KEY[protocol]}`,
+        }))
+      : []),
+  ];
+
+  return rows.map((row, index) => ({ ...row, id: `plan-${index}` }));
+}
+
+/**
+ * Which planned write an event is.
+ *
+ * By type and record key, never by position: a run that finds a step already on
+ * chain writes no event for it, so counting rows would slide every later event
+ * onto the wrong plan row and report the wrong step as the one in flight.
+ */
+const KIND_OF: Record<string, PlanKind | undefined> = {
+  "agent.created": "register",
+  "ens.resolver.attached": "resolver",
+  "ens.record.updated": "record",
+  "ens.permission.granted": "grant",
+  "ens.action.denied": "grant",
+};
+
+function matches(plan: PlanRow, step: Step): boolean {
+  return (
+    KIND_OF[step.type] === plan.kind &&
+    (plan.key === null || plan.key === step.key)
+  );
+}
+
+/**
+ * The plan with the events that have arrived folded into it.
+ *
+ * Events that match nothing planned are appended rather than dropped — the
+ * server is the authority on what it did, and a row this screen did not expect
+ * is exactly the row worth seeing.
+ *
+ * With no plan — a run resumed from the query string, whose form this page
+ * never held — the events are the whole list, which is what this screen showed
+ * before there was a plan at all.
+ */
+function rowsFor(
+  plan: PlanRow[] | null,
+  steps: Step[],
+  complete: boolean,
+): StepRow[] {
+  const arrived = (step: Step, id: string): StepRow => ({
+    id,
+    what: step.what,
+    status: step.status,
+    state: "done",
+    txHash: step.txHash,
+    readBack: step.readBack,
+  });
+
+  if (!plan) return steps.map((step, index) => arrived(step, `${index}`));
+
+  const used = new Set<number>();
+  const rows: StepRow[] = plan.map((row) => {
+    const index = steps.findIndex(
+      (step, at) => !used.has(at) && matches(row, step),
+    );
+    const step = index === -1 ? null : steps[index];
+    if (!step) {
+      return {
+        id: row.id,
+        what: row.what,
+        status: "",
+        // A finished run that never wrote this step spent nothing on it. Which
+        // of the two reasons — already on chain, or never reached — is the
+        // ENS track's answer, not this row's.
+        state: complete ? "unspent" : "queued",
+        txHash: null,
+        readBack: null,
+      };
+    }
+    used.add(index);
+    return arrived(step, row.id);
+  });
+
+  // Exactly one row is in flight: the first the run has not accounted for yet.
+  if (!complete) {
+    const next = rows.findIndex((row) => row.state === "queued");
+    if (next !== -1) rows[next] = { ...rows[next]!, state: "running" };
+  }
+
+  return [
+    ...rows,
+    ...steps
+      .map((step, index) => ({ step, index }))
+      .filter(({ index }) => !used.has(index))
+      .map(({ step, index }) => arrived(step, `unplanned-${index}`)),
+  ];
 }
 
 /**
@@ -79,22 +240,30 @@ const STEP_COLUMNS: TableColumn<StepRow>[] = [
   {
     key: "status",
     header: "result",
-    width: pixel(110),
-    renderCell: (row) => (
-      <Badge
-        tone={
-          row.status === "success"
-            ? "good"
-            : row.status === "denied"
-              ? "warn"
-              : row.status === "failed"
-                ? "bad"
-                : "neutral"
-        }
-      >
-        {row.status}
-      </Badge>
-    ),
+    width: pixel(130),
+    // A row that has not run reports where it is in the queue, and nothing
+    // else. `neutral` for all three: none of them is news, and an amber row
+    // for a write that simply has not started yet reads as a problem.
+    renderCell: (row) => {
+      if (row.state === "running") return <Badge>in flight</Badge>;
+      if (row.state === "queued") return <Badge>queued</Badge>;
+      if (row.state === "unspent") return <Badge>no transaction</Badge>;
+      return (
+        <Badge
+          tone={
+            row.status === "success"
+              ? "good"
+              : row.status === "denied"
+                ? "warn"
+                : row.status === "failed"
+                  ? "bad"
+                  : "neutral"
+          }
+        >
+          {row.status}
+        </Badge>
+      );
+    },
   },
   {
     key: "readBack",
@@ -123,6 +292,14 @@ const STEP_COLUMNS: TableColumn<StepRow>[] = [
     // deployment is configured for — never `REGISTRATION_CHAIN_ID`, which is
     // where the registry and financial tracks write instead.
     renderCell: (row) => {
+      // A planned row has no transaction *yet*, which is not the same claim as
+      // a run that sent none — so it says nothing rather than "no transaction".
+      if (row.state !== "done")
+        return (
+          <Text type="code" size="2xs" color="secondary">
+            —
+          </Text>
+        );
       const url =
         row.txHash && !/^0x0+$/.test(row.txHash)
           ? explorerTxUrl(publicEnv().chainId, row.txHash)
@@ -178,6 +355,12 @@ export function CreateAgent({ parentName }: { parentName: string }) {
   const [delegate, setDelegate] = useState(false);
 
   const [agentId, setAgentId] = useState<string | null>(resumed);
+  /**
+   * The writes this submission asked for, or null when the page never held the
+   * form that asked — a resumed run, where the endpoints and the delegation are
+   * the server's to report rather than this screen's to assume.
+   */
+  const [plan, setPlan] = useState<PlanRow[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [taken, setTaken] = useState<{ owner: string; reason: string } | null>(
@@ -242,6 +425,9 @@ export function CreateAgent({ parentName }: { parentName: string }) {
     setBusy(true);
     setError(null);
     setTaken(null);
+    // Before the request, not after it: the point of the plan is the interval
+    // where there is nothing else to show.
+    setPlan(planFor({ ensName, mcp, a2a, delegate }));
     try {
       const result = await createAgent({
         label,
@@ -260,6 +446,8 @@ export function CreateAgent({ parentName }: { parentName: string }) {
         // Not a failure of this request. Someone owns the name, which is a
         // fact about the world rather than a fault in what was asked for.
         setTaken({ owner: result.owner, reason: result.reason });
+        // Nothing was written, so there is no run to plan for.
+        setPlan(null);
         return;
       }
       setAgentId(result.id);
@@ -268,18 +456,13 @@ export function CreateAgent({ parentName }: { parentName: string }) {
       await poll(result.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setPlan(null);
     } finally {
       setBusy(false);
     }
   }
 
-  const steps: StepRow[] = (progress?.steps ?? []).map((step, index) => ({
-    id: `${index}`,
-    what: step.what,
-    status: step.status,
-    txHash: step.txHash,
-    readBack: step.readBack,
-  }));
+  const steps = rowsFor(plan, progress?.steps ?? [], complete);
 
   const ensName = label ? `${label}.${parentName}` : parentName;
 
@@ -408,10 +591,10 @@ export function CreateAgent({ parentName }: { parentName: string }) {
         <Outcome tone="fault" title="The request did not complete" detail={error} />
       ) : null}
 
-      {agentId && progress ? (
+      {plan || (agentId && progress) ? (
         <Frame
           title="provisioning"
-          subtitle="Each row is a write and the read that followed it. Steps that found their work already on chain spend nothing and say so."
+          subtitle="Every write this submission asks for, in the order it happens. A row becomes a transaction and the read that followed it; one that ends with no transaction spent nothing, because it found its work already on chain."
         >
           <VStack gap={4}>
             {steps.length === 0 ? (
@@ -427,9 +610,15 @@ export function CreateAgent({ parentName }: { parentName: string }) {
               />
             )}
 
+            {/*
+              Only once the run has answered. Before the first poll returns
+              there is a plan and nothing else, and five tracks painted from
+              defaults would be this screen reporting chain state it has not
+              read.
+            */}
             <HStack gap={3} wrap="wrap" align="center">
-              {TRACKS.map(({ key, header }) => {
-                const value = progress.tracks[key];
+              {(progress ? TRACKS : []).map(({ key, header }) => {
+                const value = progress!.tracks[key];
                 const t = track(key, value);
                 return (
                   <HStack key={key} gap={1.5} align="center">
@@ -448,7 +637,7 @@ export function CreateAgent({ parentName }: { parentName: string }) {
               systems — an agent without them is unfinished, not broken.
             </Text>
 
-            {complete ? (
+            {complete && progress ? (
               <Outcome
                 tone={progress.tracks.ens === "active" ? "allowed" : "fault"}
                 title={
@@ -465,8 +654,10 @@ export function CreateAgent({ parentName }: { parentName: string }) {
                   </Link>
                 }
               />
-            ) : (
+            ) : steps.some((row) => row.state === "done") ? (
               <Loading what="Waiting for the next confirmation" />
+            ) : (
+              <Loading what="Waiting for the first transaction" />
             )}
           </VStack>
         </Frame>
