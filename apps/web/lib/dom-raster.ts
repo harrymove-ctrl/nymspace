@@ -84,6 +84,74 @@ const SVG_PAINT = [
  */
 const SVG_CACHE_LIMIT = 64;
 
+/**
+ * A colour stop with a position, which is all a dash is made of.
+ *
+ * `repeating-linear-gradient(colour 0px, colour 2px, transparent 2px,
+ * transparent 7px)` is how the console draws every dashed edge and rule it has
+ * — the frame's four sides, `frame-rule`, `frame-rule-below`. Computed, the
+ * stops always arrive as absolute pixels, which is why this matches `px` and
+ * nothing else.
+ */
+const GRADIENT_STOP = /(rgba?\([^)]*\))\s+(-?[\d.]+)px/g;
+
+const CLEAR = /^rgba?\([^)]*,\s*0\)$/;
+
+/** Split a comma-separated CSS list without splitting inside `rgb(...)`. */
+function splitList(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (c === "(") depth++;
+    else if (c === ")") depth--;
+    else if (c === "," && depth === 0) {
+      parts.push(value.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts;
+}
+
+/**
+ * A CSS length against the basis a percentage would resolve to.
+ *
+ * `auto` and anything unparseable fall back to the basis, which is what a
+ * background layer with no explicit size does.
+ */
+function lengthOf(token: string | undefined, basis: number): number {
+  if (!token) return basis;
+  if (token.endsWith("%")) return (parseFloat(token) / 100) * basis;
+  const value = parseFloat(token);
+  return Number.isFinite(value) ? value : basis;
+}
+
+/** The dash a repeating gradient describes, or null if it describes something else. */
+function dashOf(layer: string) {
+  if (!layer.startsWith("repeating-linear-gradient")) return null;
+  GRADIENT_STOP.lastIndex = 0;
+  let colour = "";
+  let dash = 0;
+  let period = 0;
+  let match: RegExpExecArray | null;
+  while ((match = GRADIENT_STOP.exec(layer))) {
+    const [, stopColour, offset] = match;
+    const at = parseFloat(offset!);
+    period = Math.max(period, at);
+    if (CLEAR.test(stopColour!)) {
+      // The first transparent stop is where the ink stops, and so is the length
+      // of the dash. Stops before it are all the same colour in this vocabulary.
+      if (!dash) dash = at;
+    } else if (!colour) {
+      colour = stopColour!;
+    }
+  }
+  if (!colour || period <= 0) return null;
+  return { colour, dash: dash || period, period };
+}
+
 export interface DomRaster {
   /** The texture. Resized by {@link DomRaster.paint}. */
   readonly canvas: HTMLCanvasElement;
@@ -229,6 +297,69 @@ export function createDomRaster(
     range.selectNodeContents(node);
   }
 
+  /**
+   * The console's edges and rules, which are background images rather than
+   * borders.
+   *
+   * `frame-edge` paints four one-pixel repeating gradients — one per side,
+   * placed and sized by `background-position` and `background-size` — because a
+   * dashed CSS border cannot be notched by the title sitting over it. That is
+   * the register's whole look, and a silhouette that drew only
+   * `background-color` erased every frame on the screen the moment the fold
+   * covered the live DOM.
+   *
+   * Only the repeating form is drawn, deliberately. It is the one the console
+   * uses for a line, it maps exactly onto `setLineDash`, and a general gradient
+   * painter would be a renderer — which the note at the top of this file says
+   * this is not.
+   */
+  function paintRules(
+    style: CSSStyleDeclaration,
+    rect: DOMRect,
+    x: number,
+    y: number,
+  ) {
+    const image = style.backgroundImage;
+    if (!image || image === "none") return;
+
+    const layers = splitList(image);
+    const sizes = splitList(style.backgroundSize);
+    const positions = splitList(style.backgroundPosition);
+
+    for (let i = 0; i < layers.length; i++) {
+      const dash = dashOf(layers[i]!);
+      if (!dash) continue;
+
+      const size = (sizes[i] ?? sizes[0] ?? "auto").split(/\s+/);
+      const width = lengthOf(size[0], rect.width);
+      const height = lengthOf(size[1], rect.height);
+      if (width < 0.5 || height < 0.5) continue;
+
+      /* A percentage position resolves against the space the layer does not
+         fill, which is what puts `100% 0` on the right-hand edge rather than
+         one pixel past it. */
+      const position = (positions[i] ?? positions[0] ?? "0px 0px").split(/\s+/);
+      const left = x + lengthOf(position[0], rect.width - width);
+      const top = y + lengthOf(position[1], rect.height - height);
+
+      ctx!.save();
+      ctx!.strokeStyle = dash.colour;
+      ctx!.setLineDash([dash.dash, dash.period - dash.dash]);
+      ctx!.beginPath();
+      if (width >= height) {
+        ctx!.lineWidth = height;
+        ctx!.moveTo(left, top + height / 2);
+        ctx!.lineTo(left + width, top + height / 2);
+      } else {
+        ctx!.lineWidth = width;
+        ctx!.moveTo(left + width / 2, top);
+        ctx!.lineTo(left + width / 2, top + height);
+      }
+      ctx!.stroke();
+      ctx!.restore();
+    }
+  }
+
   function paintBox(
     element: Element,
     style: CSSStyleDeclaration,
@@ -275,6 +406,8 @@ export function createDomRaster(
       trace();
       ctx!.stroke();
     }
+
+    paintRules(style, rect, x, y);
   }
 
   /**
