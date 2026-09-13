@@ -127,6 +127,7 @@ export function DecryptGate({
       subject={subject ?? screenSubject(pathname)}
       minHeight={minHeight}
       onConnect={visitor.connect}
+      connecting={visitor.connecting}
     >
       {children}
     </Veil>
@@ -138,11 +139,14 @@ function Veil({
   subject,
   minHeight,
   onConnect,
+  connecting,
 }: {
   children: React.ReactNode;
   subject: string;
   minHeight: string;
   onConnect: () => void;
+  /** Privy's modal is over this veil. See the effect that consumes it. */
+  connecting: boolean;
 }) {
   const hostRef = React.useRef<HTMLElement>(null);
   const contentRef = React.useRef<HTMLElement>(null);
@@ -150,6 +154,33 @@ function Veil({
 
   /** Which engine actually started, for the `data-engine` attribute. */
   const [engine, setEngine] = React.useState<string>();
+
+  /*
+    The running engine, for callers other than the one that built it.
+
+    A ref rather than state: pausing must not re-render, and it must not land in
+    the dependencies of the effect below, which would tear the engine down and
+    re-raster the whole console every time the modal opened.
+  */
+  const instanceRef = React.useRef<
+    DecryptRevealInstance | CipherFieldInstance | null
+  >(null);
+
+  /*
+    The same flag the effect below applies, readable from the effect that builds
+    the engine without becoming one of its dependencies.
+
+    A theme flip rebuilds the engine, and a rebuild that happens while the modal
+    is open would hand back a *running* one — the pause effect would not correct
+    it, because its own dependencies have not changed. Seeding from a ref is
+    what makes "paused" a property of the veil rather than of one instance of it.
+
+    Written in the effect below rather than during render, which the React
+    Compiler rejects outright. That is not a formality here: the ref only ever
+    needs to be current when an *effect* reads it, and both writer and reader
+    are effects, so there was never a reason to touch it during a render.
+  */
+  const connectingRef = React.useRef(connecting);
 
   /*
     The theme, as a number that changes when it changes.
@@ -246,8 +277,37 @@ function Veil({
       setEngine(instance ? "cipher-field" : "none");
     }
 
-    return () => instance?.destroy();
+    instance?.setPaused(connectingRef.current);
+    instanceRef.current = instance;
+    return () => {
+      instance?.destroy();
+      instanceRef.current = null;
+    };
   }, [theme]);
+
+  /*
+    Hold the veil still while Privy's modal is up.
+
+    The loop does not idle on its own: its settle test requires `!churning`, and
+    `churning` is true for as long as `GEOMETRY.scramble` is non-zero, which is
+    always. So an unconnected console renders a full-screen WebGL2 pass every
+    frame for as long as it is on screen — including the whole of the wallet
+    handshake, which is the one stretch where the veil is behind a modal nobody
+    is looking past and is competing for the main thread with the thing the
+    visitor is actually waiting for.
+
+    Paused rather than destroyed: the canvas keeps its last frame, so the screen
+    stays veiled exactly as it was and closing the modal costs nothing to undo.
+    Tearing it down instead would re-raster the console on every open and flash
+    the content clear in the gap.
+
+    Separate from the effect above so that opening a modal never rebuilds an
+    engine; this one only ever toggles a flag on whatever is already running.
+  */
+  React.useEffect(() => {
+    connectingRef.current = connecting;
+    instanceRef.current?.setPaused(connecting);
+  }, [connecting]);
 
   /*
     One tree, whichever engine runs.

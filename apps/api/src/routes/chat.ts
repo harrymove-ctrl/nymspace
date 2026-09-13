@@ -647,17 +647,48 @@ async function recordPlan(
   if (!agent) return undefined;
 
   const allowed = await deps.ens.canSetText(agent.ensName, key, agent.controllerAddress);
+
+  /**
+   * `??`, not `||`. An empty string is a value here — it clears the record —
+   * and only an absent one gets the placeholder.
+   */
   const value = given ?? `https://example.com/${key}`;
+
+  /**
+   * A plan to clear says "clear".
+   *
+   * Rendering it as "Write agent-endpoint[mcp]" with nothing after it is a
+   * plan the operator has to decode before they can agree to it, and the
+   * whole point of the card is that what is being proposed is legible before
+   * it is chosen.
+   */
+  const clearing = value === "";
+
+  /**
+   * `allowed` decides the verb first, and `clearing` only picks which
+   * permitted verb.
+   *
+   * The other way round — `clearing ? "Clear" : allowed ? …` — reads fine and
+   * drops the one word the card exists to carry: every write the resolver will
+   * refuse is titled "Attempt", and a refused *clear* was getting "Clear",
+   * which is what a successful one says. The title stopped distinguishing a
+   * write that lands from one that is rejected, for this case only.
+   */
+  const verb = allowed ? (clearing ? "Clear" : "Write") : "Attempt";
 
   return {
     kind: "plan",
-    title: allowed ? `Write ${key}` : `Attempt ${key}`,
+    title: `${verb} ${key}`,
     summary: allowed
-      ? `The controller writes its own record. It holds SET_TEXT on this key, so the resolver will accept it.`
+      ? clearing
+        ? `The controller clears its own record. It holds SET_TEXT on this key, so the resolver will accept it, and the name then publishes no value for this key at all.`
+        : `The controller writes its own record. It holds SET_TEXT on this key, so the resolver will accept it.`
       : `The controller does not hold SET_TEXT on this key. The resolver will refuse, and that refusal is the result.`,
     steps: [
       {
-        title: allowed ? `Set ${key}` : `Try to set ${key}`,
+        title: allowed
+          ? `${clearing ? "Clear" : "Set"} ${key}`
+          : `Try to ${clearing ? "clear" : "set"} ${key}`,
         method: "POST",
         path: `/v1/agents/${id}/records`,
         body: { key, value },
@@ -671,7 +702,9 @@ async function recordPlan(
       },
     ],
     closing: allowed
-      ? "The record is on chain. The old value and the transaction hash are both in the result."
+      ? clearing
+        ? "The record is empty. The value it used to hold and the transaction hash are both in the result."
+        : "The record is on chain. The old value and the transaction hash are both in the result."
       : "Nothing changed, and the refusal came from the contract rather than from this console.",
   };
 }

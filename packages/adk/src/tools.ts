@@ -233,7 +233,8 @@ export function chatToolDeclarations(fleet: RouterFleet): {
           recordKey: recordKeyParam,
           value: {
             type: "STRING",
-            description: "The value to write, if the operator gave one.",
+            description:
+              "The value to write, if the operator gave one. The empty string is a real value here: it clears the record, publishing no endpoint at all. Use it when the operator asks to clear, remove or unset a record.",
           } as Schema,
         },
         ["agentId", "recordKey"],
@@ -335,6 +336,25 @@ export function validateToolCall(
     return typeof value === "string" && value.length > 0 ? value : undefined;
   };
 
+  /**
+   * The record's value, where an empty string is a value rather than an
+   * absence.
+   *
+   * `optionalString` is right for a label, an amount and a recipient: an
+   * empty one of those is a field the model failed to fill in. It is wrong
+   * here, because this product accepts an empty record value and says so —
+   * `apps/api/src/routes/shared.ts` calls it out: "An empty value is allowed:
+   * clearing the record publishes no endpoint at all."
+   *
+   * Collapsing the two meant an operator asking to clear an endpoint got a
+   * plan to publish `https://example.com/<key>` onto it, which is the
+   * opposite of what they asked for.
+   */
+  const recordValue = (): string | undefined => {
+    const value = args.value;
+    return typeof value === "string" ? value : undefined;
+  };
+
   switch (name) {
     case "show_fleet":
       return { ok: true, call: { tool: "show_fleet" } };
@@ -377,10 +397,11 @@ export function validateToolCall(
           /**
            * The one unconstrained argument, and deliberately so. It is the
            * text an operator wants written into a record, which is free text
-           * by definition, and it lands in a plan the operator reads before
-           * confirming. Constraining it would be theatre.
+           * by definition — the empty string included — and it lands in a plan
+           * the operator reads before confirming. Constraining it would be
+           * theatre.
            */
-          value: optionalString("value"),
+          value: recordValue(),
         },
       };
     }

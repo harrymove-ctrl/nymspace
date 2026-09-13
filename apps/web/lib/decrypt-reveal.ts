@@ -25,7 +25,13 @@
  *     is the change that matters and the section below is about it.
  *  3. One behavioural change, at `uCrisp`: reduced motion no longer lifts the
  *     cipher. Commented at the line.
- *  4. Nothing else. Do not reformat, rename, or "tidy" the shader strings —
+ *  4. `setPaused`, and the `paused` flag plus `renderOnce` it needs. Upstream's
+ *     loop stops for three things — destroyed, off screen, settled — and
+ *     "settled" is unreachable while `scramble` is on, so an idle effect runs
+ *     forever. The caller needs a fourth: hold still, keep the last frame, cost
+ *     nothing to resume. `components/console/decrypt-gate.tsx` uses it to stop
+ *     competing with a wallet handshake happening over the top of the veil.
+ *  5. Nothing else. Do not reformat, rename, or "tidy" the shader strings —
  *     every edit here is one more thing to reconcile when upstream moves.
  *
  * ## The effect is not Chromium's; only upstream's texture supplier is
@@ -167,6 +173,19 @@ export interface DecryptRevealInstance {
   setOptions: (options: DecryptRevealOptions) => void;
   /** Re-read canvas size. Call when the element is resized. */
   resize: () => void;
+  /**
+   * Hold the loop still, or let it run again.
+   *
+   * Distinct from {@link destroy} in what survives: the GL objects, the cell
+   * atlas and the captured texture all stay, so the canvas goes on showing its
+   * last frame and resuming costs nothing. It is the right call whenever the
+   * effect is still the thing on screen but nothing is watching it animate —
+   * the loop otherwise never idles of its own accord while `scramble` is on.
+   *
+   * The pointer keeps being tracked while paused, so resuming picks the reveal
+   * up wherever the cursor actually is rather than snapping from where it was.
+   */
+  setPaused: (paused: boolean) => void;
   /** Stop the loop and release all GPU resources. */
   destroy: () => void;
 }
@@ -1039,10 +1058,17 @@ export function createDecryptReveal(
   let destroyed = false;
   let running = false;
   let visible = true;
+  /*
+    Held still by the caller, as opposed to `visible`, which this file decides
+    for itself from its own IntersectionObserver. Two flags rather than one
+    because they are two different authorities over the same loop, and a single
+    flag would let either of them overrule the other by arriving second.
+  */
+  let paused = false;
 
   function frame(now: number) {
     if (destroyed) return;
-    if (!visible) {
+    if (!visible || paused) {
       running = false;
       return;
     }
@@ -1076,8 +1102,19 @@ export function createDecryptReveal(
     raf = requestAnimationFrame(frame);
   }
 
+  /**
+   * Repaint the current state without touching the loop.
+   *
+   * For the cases where the canvas has been invalidated from outside — a resize
+   * clears it — while the engine is deliberately held still.
+   */
+  function renderOnce() {
+    if (destroyed || !visible) return;
+    render();
+  }
+
   function start() {
-    if (destroyed || running || !visible) return;
+    if (destroyed || running || !visible || paused) return;
     running = true;
     lastTime = performance.now();
     raf = requestAnimationFrame(frame);
@@ -1094,7 +1131,15 @@ export function createDecryptReveal(
 
   const observer = new ResizeObserver(() => {
     syncCanvasSize();
-    start();
+    /*
+      Resizing the backing store clears it, so a paused engine would be left
+      holding a transparent canvas — and a transparent veil is not a veil, it is
+      the console in the clear. `start()` cannot cover that: paused is exactly
+      what it refuses to act on. One synchronous frame repaints the held state
+      at the new size without resuming the loop.
+    */
+    if (paused) renderOnce();
+    else start();
   });
   observer.observe(output);
   observer.observe(content);
@@ -1166,7 +1211,21 @@ export function createDecryptReveal(
     },
     resize() {
       syncCanvasSize();
-      start();
+      if (paused) renderOnce();
+      else start();
+    },
+    setPaused(next) {
+      if (paused === next) return;
+      paused = next;
+      /*
+        Cancel on the way in rather than waiting for the next `frame` to notice:
+        a frame already queued would otherwise render once more after the caller
+        believes the effect is held, which is the difference between pausing and
+        pausing-almost.
+      */
+      if (paused) cancelAnimationFrame(raf);
+      running = false;
+      if (!paused) start();
     },
     destroy() {
       destroyed = true;
