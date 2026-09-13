@@ -10,6 +10,7 @@ import { useState } from "react";
 import { discover } from "@/lib/api";
 import { classify, EMPTY_STATES } from "@/lib/console/errors";
 import { graphStateFrom, LOADING_COPY } from "@/lib/console/state";
+import { ConnectFromClaude } from "./connect-from-claude";
 import { McpConnect } from "./mcp-connect";
 import { Absent, Badge, Empty, Loading, Outcome, Frame } from "./primitives";
 
@@ -162,7 +163,27 @@ export function DiscoverForm() {
                 </HStack>
 
                 {agent.mcpEndpoint ? (
-                  <McpConnect target={{ kind: "graph", graphAgentKey: agent.graphId }} />
+                  <>
+                    <McpConnect target={{ kind: "graph", graphAgentKey: agent.graphId }} />
+                    {/*
+                      Connect asks whether the endpoint answers here; this hands
+                      the operator what to run so it answers in their own client.
+                      Both are offered before the handshake rather than after a
+                      successful one: what the registration advertises is a fact
+                      about the registration, and gating the snippet on a
+                      handshake would imply this console vouched for a server it
+                      only pinged.
+                    */}
+                    <ConnectFromClaude
+                      source={{
+                        kind: "graph",
+                        agentId: agent.agentId,
+                        name: agent.name,
+                        ensName: agent.ensName,
+                      }}
+                      endpoint={agent.mcpEndpoint}
+                    />
+                  </>
                 ) : null}
 
                 {!agent.signals.validation.available ? (
