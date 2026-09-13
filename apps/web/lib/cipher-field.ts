@@ -67,6 +67,13 @@ export interface CipherFieldElements {
 
 export interface CipherFieldInstance {
   setOptions: (options: CipherFieldOptions) => void;
+  /**
+   * Hold the loop still, or let it run again. The glyph atlas and the painted
+   * canvas survive, so the veil stays exactly as it was and resuming is free.
+   * See the same method on `DecryptRevealInstance`, which this mirrors so the
+   * two engines stay interchangeable to a caller.
+   */
+  setPaused: (paused: boolean) => void;
   destroy: () => void;
 }
 
@@ -143,6 +150,8 @@ export function createCipherField(
   let raf = 0;
   let running = false;
   let visible = true;
+  /** Held by the caller; `visible` is this file's own. See `decrypt-reveal`. */
+  let paused = false;
   let destroyed = false;
 
   function cellSize() {
@@ -323,7 +332,7 @@ export function createCipherField(
 
   function frame(now: number) {
     if (destroyed) return;
-    if (!visible) {
+    if (!visible || paused) {
       running = false;
       return;
     }
@@ -367,7 +376,7 @@ export function createCipherField(
   }
 
   function start() {
-    if (destroyed || running || !visible) return;
+    if (destroyed || running || !visible || paused) return;
     running = true;
     lastTime = performance.now();
     raf = requestAnimationFrame(frame);
@@ -401,7 +410,13 @@ export function createCipherField(
 
   const resize = new ResizeObserver(() => {
     gridDirty = true;
-    start();
+    // See the same guard in `decrypt-reveal`: a resize invalidates what is on
+    // the canvas, and a paused engine would never repaint it.
+    if (paused) {
+      if (!destroyed && visible) render();
+    } else {
+      start();
+    }
   });
   resize.observe(host);
 
@@ -435,6 +450,13 @@ export function createCipherField(
         gridDirty = true;
       }
       start();
+    },
+    setPaused(next) {
+      if (paused === next) return;
+      paused = next;
+      if (paused) cancelAnimationFrame(raf);
+      running = false;
+      if (!paused) start();
     },
     destroy() {
       destroyed = true;
