@@ -890,4 +890,19 @@ html::-webkit-scrollbar {
   width: 100%;
   height: 100%;
   overflow-y: auto;
+
+  /* A flex item shrinks below its content, and this one is a column of
+     unknown height inside a box of exactly one viewport.
+
+     Left to shrink it stops at the viewport and its content spills out of it,
+     still laid out and still scrollable — so the only visible symptom is that
+     whatever the item paints stops where the item stopped. The console's
+     surface colour is painted by that item, so the screen came out as one
+     viewport of `surface-body` sitting on the body's near-black, with a hard
+     horizontal seam across it. That is the exact failure the console layout's
+     own comment describes from the other direction, and it came back the
+     moment the surface became a flex child. */
+  & > * {
+    flex-shrink: 0;
+  }
 }
