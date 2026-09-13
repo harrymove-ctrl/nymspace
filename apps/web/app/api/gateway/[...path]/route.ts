@@ -40,9 +40,53 @@ function targetFor(segments: string[]): URL | undefined {
   );
 }
 
-export async function POST(
+/**
+ * The console MCP server, which is the one path that is not a plain JSON POST.
+ *
+ * Streamable HTTP needs three things this gateway did not give it: an `accept`
+ * header naming both `application/json` and `text/event-stream`, a `GET` for
+ * the event stream and a `DELETE` to end a session, and the `Mcp-Session-Id`
+ * header carried in both directions. Without the first, every handshake came
+ * back `406 Not Acceptable` — from the MCP server itself, which means the
+ * server was deployed, configured and reachable the whole time and no client
+ * could complete a single call.
+ *
+ * Widened for this path only. Forwarding arbitrary methods across all of
+ * `/v1/*` would open every read and delete on the API through a path this
+ * file's own header says is not authentication; the MCP endpoint needs them
+ * and nothing else does.
+ */
+const MCP_CONSOLE = ["v1", "mcp", "console"];
+
+function isMcpConsole(segments: string[]): boolean {
+  return (
+    segments.length === MCP_CONSOLE.length &&
+    segments.every((segment, i) => segment === MCP_CONSOLE[i])
+  );
+}
+
+/**
+ * Named, rather than copied from the request wholesale.
+ *
+ * A proxy that forwards whatever it was given also forwards `cookie` and
+ * `origin`, and this one adds a credential — so what crosses is a list, and
+ * adding to it is a decision someone makes on purpose.
+ */
+const FORWARDED = [
+  "content-type",
+  "accept",
+  "mcp-session-id",
+  "mcp-protocol-version",
+  "last-event-id",
+];
+
+/** What the client needs back to keep a session and read a stream. */
+const RETURNED = ["content-type", "mcp-session-id", "cache-control"];
+
+async function forward(
   request: Request,
-  { params }: { params: Promise<{ path: string[] }> },
+  path: string[],
+  method: "POST" | "GET" | "DELETE",
 ) {
   const token = process.env.CONSOLE_MCP_TOKEN;
   if (!token) {
@@ -59,7 +103,6 @@ export async function POST(
     );
   }
 
-  const { path } = await params;
   const target = targetFor(path);
   if (!target) {
     return Response.json({ error: "not found", status: 404 }, { status: 404 });
@@ -67,13 +110,17 @@ export async function POST(
 
   target.search = new URL(request.url).search;
 
+  const headers = new Headers({ authorization: `Bearer ${token}` });
+  for (const name of FORWARDED) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  if (!headers.has("content-type")) headers.set("content-type", "application/json");
+
   const response = await fetch(target, {
-    method: "POST",
-    headers: {
-      "content-type": request.headers.get("content-type") ?? "application/json",
-      authorization: `Bearer ${token}`,
-    },
-    body: await request.text(),
+    method,
+    headers,
+    ...(method === "POST" ? { body: await request.text() } : {}),
   });
 
   /*
@@ -83,12 +130,48 @@ export async function POST(
     here as ordinary 200s carrying a typed outcome, and `docs/11` is explicit
     that those must not be re-dressed as errors. Rewriting anything on this path
     would put a second opinion between the contract and the screen.
+
+    `response.body` rather than a buffered copy, because the MCP transport
+    answers with an event stream that never ends on its own.
   */
-  return new Response(response.body, {
-    status: response.status,
-    headers: {
-      "content-type":
-        response.headers.get("content-type") ?? "application/json",
-    },
-  });
+  const out = new Headers();
+  for (const name of RETURNED) {
+    const value = response.headers.get(name);
+    if (value) out.set(name, value);
+  }
+  if (!out.has("content-type")) out.set("content-type", "application/json");
+
+  return new Response(response.body, { status: response.status, headers: out });
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  return forward(request, path, "POST");
+}
+
+/** The MCP event stream. Every other path keeps answering 404 to a `GET`. */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  if (!isMcpConsole(path)) {
+    return Response.json({ error: "not found", status: 404 }, { status: 404 });
+  }
+  return forward(request, path, "GET");
+}
+
+/** Ending an MCP session. Same narrowing as `GET`. */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  if (!isMcpConsole(path)) {
+    return Response.json({ error: "not found", status: 404 }, { status: 404 });
+  }
+  return forward(request, path, "DELETE");
 }

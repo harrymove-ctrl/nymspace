@@ -663,7 +663,18 @@ async function recordPlan(
    * it is chosen.
    */
   const clearing = value === "";
-  const verb = clearing ? "Clear" : allowed ? "Write" : "Attempt";
+
+  /**
+   * `allowed` decides the verb first, and `clearing` only picks which
+   * permitted verb.
+   *
+   * The other way round — `clearing ? "Clear" : allowed ? …` — reads fine and
+   * drops the one word the card exists to carry: every write the resolver will
+   * refuse is titled "Attempt", and a refused *clear* was getting "Clear",
+   * which is what a successful one says. The title stopped distinguishing a
+   * write that lands from one that is rejected, for this case only.
+   */
+  const verb = allowed ? (clearing ? "Clear" : "Write") : "Attempt";
 
   return {
     kind: "plan",
@@ -675,7 +686,9 @@ async function recordPlan(
       : `The controller does not hold SET_TEXT on this key. The resolver will refuse, and that refusal is the result.`,
     steps: [
       {
-        title: allowed ? `${clearing ? "Clear" : "Set"} ${key}` : `Try to set ${key}`,
+        title: allowed
+          ? `${clearing ? "Clear" : "Set"} ${key}`
+          : `Try to ${clearing ? "clear" : "set"} ${key}`,
         method: "POST",
         path: `/v1/agents/${id}/records`,
         body: { key, value },
@@ -689,7 +702,9 @@ async function recordPlan(
       },
     ],
     closing: allowed
-      ? "The record is on chain. The old value and the transaction hash are both in the result."
+      ? clearing
+        ? "The record is empty. The value it used to hold and the transaction hash are both in the result."
+        : "The record is on chain. The old value and the transaction hash are both in the result."
       : "Nothing changed, and the refusal came from the contract rather than from this console.",
   };
 }
