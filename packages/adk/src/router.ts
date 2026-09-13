@@ -1,6 +1,7 @@
 import "server-only";
 
 import { FunctionTool, Gemini, InMemoryRunner, LlmAgent, getFunctionCalls } from "@google/adk";
+import type { BaseLlm } from "@google/adk";
 import type { Content } from "@google/genai";
 
 import { ROUTING_MODEL, ROUTING_TIMEOUT_MS } from "./model";
@@ -130,28 +131,61 @@ Rules:
  */
 const INERT = { status: "selected" } as const;
 
-export interface AdkRouterConfig {
-  /**
-   * The Gemini credential. Passed explicitly rather than left to ADK's
-   * environment lookup, so a deployment missing it fails where `deps.ts`
-   * constructs this rather than inside a provider call on a request.
-   */
-  apiKey: string;
-  model?: string;
+/**
+ * Names for a session nobody will look up. Constants so the runner and the
+ * session it is handed cannot drift apart.
+ */
+const APP_NAME = "nymspace_console";
+const USER_ID = "console";
+
+export type AdkRouterConfig = {
   timeoutMs?: number;
-}
+} & (
+  | {
+      /**
+       * The Gemini credential. Passed explicitly rather than left to ADK's
+       * environment lookup, so a deployment missing it fails where `deps.ts`
+       * constructs this rather than inside a provider call on a request.
+       */
+      apiKey: string;
+      /** Overrides {@link ROUTING_MODEL}. `measure:routing` is why this exists. */
+      model?: string;
+    }
+  | {
+      /**
+       * A model instance instead of a name.
+       *
+       * ADK's own `LlmAgent` takes `string | BaseLlm`, and this passes that
+       * choice through rather than closing it. It is what lets `router.test.ts`
+       * drive the loop below — first-call-wins, the budget, the error-event
+       * mapping — with no credential and no network, and it is the seam that
+       * would carry a Vertex-backed model if this ever needed one.
+       */
+      llm: BaseLlm;
+    }
+);
 
 export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
-  const model = new Gemini({
-    model: config.model ?? ROUTING_MODEL,
-    apiKey: config.apiKey,
-  });
+  const model =
+    "llm" in config
+      ? config.llm
+      : new Gemini({ model: config.model ?? ROUTING_MODEL, apiKey: config.apiKey });
   const timeoutMs = config.timeoutMs ?? ROUTING_TIMEOUT_MS;
 
-  return {
-    async route({ message, fleet }): Promise<ChatRouting> {
+  /**
+   * One turn, within the time it is given.
+   *
+   * {@link route} below decides whether to spend a second one.
+   */
+  async function attempt(
+    message: string,
+    fleet: RouterFleet,
+    budgetMs: number,
+  ): Promise<ChatRouting> {
+    {
       const started = Date.now();
       const elapsed = () => Date.now() - started;
+      const timeoutMs = budgetMs;
 
       /**
        * Tools are rebuilt per request, because the agent enumeration is the
@@ -176,7 +210,7 @@ export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
         tools,
       });
 
-      const runner = new InMemoryRunner({ agent, appName: "nymspace_console" });
+      const runner = new InMemoryRunner({ agent, appName: APP_NAME });
 
       /**
        * One turn, no session, no history — design D6.
@@ -196,7 +230,31 @@ export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
         timer = setTimeout(() => resolve("timeout"), timeoutMs);
       });
 
-      const events = runner.runEphemeral({ userId: "console", newMessage: content });
+      /**
+       * A fresh session per request, and `runAsync` rather than `runEphemeral`.
+       *
+       * `runEphemeral` is the tidier expression of D6 and it takes no
+       * `abortSignal`, which turns out to matter more. A session created here
+       * and never looked up again carries no history either — the property D6
+       * actually needs — and `runAsync` accepts the signal, so a request the
+       * console has given up on stops the model call rather than leaving it
+       * in flight, spending quota on an answer nobody will read.
+       *
+       * The session service is in-memory, so this is an object and a map
+       * insert, not I/O.
+       */
+      const controller = new AbortController();
+      const session = await runner.sessionService.createSession({
+        appName: APP_NAME,
+        userId: USER_ID,
+      });
+
+      const events = runner.runAsync({
+        userId: USER_ID,
+        sessionId: session.id,
+        newMessage: content,
+        abortSignal: controller.signal,
+      });
 
       try {
         while (true) {
@@ -275,11 +333,72 @@ export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
         return { kind: "miss", reason: "provider_error", elapsedMs: elapsed() };
       } finally {
         if (timer) clearTimeout(timer);
-        await events.return?.(undefined).catch(() => undefined);
+
+        /**
+         * Abort, then walk away without waiting.
+         *
+         * `await events.return()` looks like the tidy way to close a generator
+         * and it defeats the entire budget: `return()` resolves only when the
+         * generator reaches a yield point, so a model still inside a slow
+         * request holds this `finally` open for as long as it takes. The
+         * timeout then measures nothing — the route waits exactly as long as
+         * it would have with no budget at all, which `router.test.ts` caught
+         * by scripting a model that sleeps for a minute.
+         *
+         * The signal is what actually stops the work. Not awaiting the close
+         * is what guarantees the caller gets an answer inside the budget even
+         * when the model ignores it.
+         */
+        controller.abort();
+        void events.return?.(undefined)?.catch(() => undefined);
       }
+    }
+  }
+
+  return {
+    async route({ message, fleet }): Promise<ChatRouting> {
+      const started = Date.now();
+      const total = () => Date.now() - started;
+
+      const first = await attempt(message, fleet, timeoutMs);
+
+      /**
+       * One retry, and only on an empty turn.
+       *
+       * Measured rather than assumed — `evidence/routing-models.json` holds
+       * the run. The pinned model placed seven of twelve first time, and two
+       * of the four empty turns placed on a second ask, which takes the whole
+       * question from seven in twelve to nine. The retried requests finished
+       * between 1.3 and 1.6 seconds in total, so the cost lands entirely on
+       * requests that were otherwise about to return the list of suggestions.
+       *
+       * Not on `provider_error`: asking again immediately is what a service
+       * refusing for quota least needs, and the console has a good answer for
+       * an outage already. Not on `timeout`: the budget exists precisely to
+       * bound the longest wait, and doubling it for the slowest case is the
+       * opposite of what it is for. The two attempts share one budget, so a
+       * retry can never push the total past what a single call was allowed.
+       */
+      if (first.kind === "call" || first.reason !== "no_call") return first;
+
+      const remaining = timeoutMs - total();
+      if (remaining < MIN_RETRY_MS) return { ...first, elapsedMs: total() };
+
+      const second = await attempt(message, fleet, remaining);
+      return { ...second, elapsedMs: total() };
     },
   };
 }
+
+/**
+ * Below this, a second attempt is a request that will time out.
+ *
+ * The pinned model's own median is under a second when it is quick and several
+ * when it is not, so two seconds is the floor at which asking again is worth
+ * the round trip rather than a way to spend the rest of the budget on a
+ * connection that never gets an answer.
+ */
+const MIN_RETRY_MS = 2_000;
 
 /**
  * The user turn: the question, and the fleet as data.

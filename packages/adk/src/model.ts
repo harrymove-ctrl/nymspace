@@ -35,9 +35,11 @@
  * built. Silence is a recoverable failure; confident misdirection is not, and
  * a 429 is not a property of the model at all.
  *
- * Seven placements in ten is the honest number to hold in mind. Three
- * questions in ten still get the list of suggestions — against ten in ten
- * before this stage existed.
+ * Seven placements in ten on a single attempt is the honest number to hold in
+ * mind, and `router.ts` spends one retry on an empty turn to move it: two of
+ * four empty turns placed on a second ask, taking the same twelve-question run
+ * from seven to nine. Three questions in ten still get the list of
+ * suggestions — against ten in ten before this stage existed.
  *
  * Re-measure before moving this. The first run of that script reported a
  * 720ms median for this same model and a survey taken ten minutes later put it

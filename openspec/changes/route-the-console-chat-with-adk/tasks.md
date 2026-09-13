@@ -26,7 +26,7 @@
 - [x] 2.6 Discard the model's text. Return the tool call and its arguments, or a miss — the runner's return type has no free-text channel
 - [x] 2.7 Apply a hard timeout below the point where a person assumes the page has hung, and expire it into a miss
 - [x] 2.8 Map every provider failure — missing credential, 429, 503, malformed response, unknown tool — onto the same miss, so the route has one failure path to handle
-- [ ] 2.9 Unit-test the runner against a fake transport: a well-formed call dispatches, two simultaneous calls take the first and record it, an unknown tool name misses, and a timeout misses. The `ChatRouter` seam is faked in `apps/api`'s suite, which covers what the route does with each outcome; what is still untested is ADK's own loop — that the generator stops at the first call and that the timeout aborts it. That needs a stub `BaseLlm`, not a stub transport
+- [x] 2.9 Unit-test the runner against a fake transport: a well-formed call dispatches, two simultaneous calls take the first and record it, an unknown tool name misses, and a timeout misses. Done with a stub `BaseLlm` rather than a stub transport — `createAdkRouter` takes `string | BaseLlm` the way `LlmAgent` does, so `router.test.ts` scripts the model directly. It caught the bug in 9.6
 
 ## 3. The route
 
@@ -65,7 +65,7 @@
 - [x] 7.1 Add the new package to `apps/web/next.config.ts`'s `transpilePackages`
 - [x] 7.2 Add it to `apps/api/vitest.config.ts`'s `test.server.deps.inline` list
 - [x] 7.3 Pass `--conditions=react-server` on any script taking the new package's entrypoint, and confirm `pnpm conditions:check` passes
-- [ ] 7.4 Run `pnpm env:check`, `pnpm typecheck`, `pnpm lint` and `pnpm test`. `env:check` passes — 57 variables, `turbo.json` and `.env.example` agree. `typecheck` and `test` pass for everything this change touches; what fails is unrelated and pre-existing: `apps/api/src/routes/agents.ts` references a `controllerUpdateSchema` that `shared.ts` does not export and four activity/provisioning values the store's types do not have, `apps/web` is missing `components/console/connect-from-claude`, and the two MCP suites bind a local socket. Run the four again once those are fixed
+- [x] 7.4 Run `pnpm env:check`, `pnpm typecheck`, `pnpm lint` and `pnpm test`. `env:check` 57 variables agreeing, `conditions:check` 24 entrypoints, `typecheck` 9/9 workspaces, `lint` clean. `test` passes per package — core 3/3 files, ens 5/5, adk 2/2, api 6 of 8. The two that do not are the MCP suites, which bind a local socket this sandbox refuses; `@nymspace/store` needs a Postgres this sandbox cannot reach either, and `turbo` hands its children a `TMPDIR` outside the writable set so `pnpm test` at the root fails before vitest starts. None of those are the code. See section 11 for what had to be fixed to get here
 
 ## 8. Evidence
 
@@ -93,14 +93,65 @@ in unit tests first.
   five of seven live calls — and two assertions passed anyway, because a
   timeout is also a miss. Gate F assertion 6 now requires `no_call`
   specifically, and the budget is set from the worst observed call
-- [ ] 9.5 Assertion 2 accepts two placements in three, because the pinned model
-  places seven in ten. That is the honest number and it is not a good one.
-  Worth revisiting with a second routing attempt on a miss, measured — the
-  wait, not the placement rate, is what a retry spends
+- [x] 9.5 Assertion 2 accepts two placements in three, because the pinned model
+  places seven in ten. Revisited by measuring rather than arguing: of four empty
+  turns in a twelve-question run, two placed on a second ask, and the retried
+  requests finished inside 1.6 seconds in total. `router.ts` now spends one
+  retry on an empty turn and on nothing else, out of the same budget
 
 ## 10. Still open
 
 - [ ] 10.1 Run Gate F against the deployed console rather than a synthetic
-  fleet, once `apps/api` typechecks again
-- [ ] 10.2 Test ADK's own loop — that the generator stops at the first call and
-  that the budget aborts it — with a stub `BaseLlm`. Task 2.9
+  fleet. `apps/api` typechecks again as of section 11, so what remains is an
+  environment: this sandbox refuses an outbound connection to the local
+  Postgres, so `listAgents` cannot be the thing that fills the enumeration in a
+  gate run here
+- [x] 10.2 Test ADK's own loop with a stub `BaseLlm`. Done — `router.test.ts`,
+  twelve cases: first-call-wins, prose discarded, the error-event mapping, the
+  `STOP` exception, out-of-set arguments, and the four retry rules
+
+- [x] 9.6 `await events.return()` in the `finally` defeated the entire budget.
+  A generator's `return()` resolves only when it reaches a yield point, so a
+  model still inside a slow request held the route open for as long as it took
+  and the timeout measured nothing. The router now aborts the run and walks
+  away without waiting. Found by scripting a model that sleeps for a minute —
+  the live gate could not have produced it
+- [x] 9.7 Switched from `runEphemeral` to `runAsync` with a session created and
+  never looked up again. `runEphemeral` is the tidier expression of D6 and
+  takes no `abortSignal`; a fresh session carries no history either, and the
+  signal means a request the console gave up on stops the model call rather
+  than leaving it in flight spending quota
+
+## 11. Pre-existing breakage this change had to clear
+
+`main` did not typecheck. None of this is the routing stage; all of it stood
+between the change and a green `pnpm typecheck`, so it is recorded here rather
+than in a commit message nobody will look for.
+
+- [x] 11.1 `apps/api/src/routes/agents.ts` imported `controllerUpdateSchema`
+  from `./shared`, which never exported one. Added: one address field, because
+  the controller is the account the resolver checks roles for and a name would
+  have to be resolved by this route before it meant anything
+- [x] 11.2 The deregistration route wrote `ens: "retired"` and
+  `erc8004: "deregistered"`, neither of which existed on the store's
+  provisioning unions. Added both — `retired` is an end state rather than a
+  failed run, and `deregistered` says a registration was withdrawn where
+  `unregistered` says it was never made. Neither column has a CHECK constraint,
+  so no migration
+- [x] 11.3 `ens.agent.deregistered` and `ens.agent.controller_updated` were
+  missing from `ActivityType`. `activity_events.type` is plain text with no
+  constraint, so this is a TypeScript union only
+- [x] 11.4 `apps/web/components/console/connect-from-claude.tsx` was imported
+  by the agent page and absent from this branch. Restored from `03782bf`, which
+  is not an ancestor of this branch — the component lives on another worktree's
+  branch and this one has been importing it across the gap
+- [x] 11.5 `PageProps` and `LayoutProps` are generated by Next, so `tsc` alone
+  never sees them and `pnpm typecheck` failed on a fresh checkout. `apps/web`'s
+  typecheck script now runs `next typegen` first
+- [x] 11.6 `conditions:check` flagged `@nymspace/api`'s `build` and
+  `start:dist`, and both were false positives: `scripts/build.mjs` passes
+  `conditions: ["react-server"]` to esbuild itself, which is where it has to be
+  because esbuild does the resolving, and `dist/index.js` is a bundle with its
+  conditions already baked in. The checker now reads the entrypoint and skips
+  build output, so it still catches a forgotten flag without demanding a
+  meaningless one

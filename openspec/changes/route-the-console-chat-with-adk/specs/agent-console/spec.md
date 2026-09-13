@@ -104,6 +104,11 @@ An unavailable, slow, or unusable routing response SHALL produce the chat's exis
 - **WHEN** the routing stage is verified
 - **THEN** a run with the credential removed MUST be recorded, because a fallback that has never been taken has not been shown to work
 
+#### Scenario: A retry is bounded by the same budget
+
+- **WHEN** the routing stage attempts a question more than once
+- **THEN** every attempt MUST be spent inside the single time budget the request was given, and a provider failure or an expired budget MUST NOT be retried
+
 ### Requirement: Agent-supplied text reaching the router is untrusted
 
 Agent labels, ENS names, record values, and any other text the fleet supplies SHALL enter the routing call as data and SHALL NOT be inserted into its system instruction or used to widen its tool surface.

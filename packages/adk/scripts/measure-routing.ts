@@ -20,7 +20,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-import { createAdkRouter, type ChatRouting, type RouterFleet } from "../src/index.ts";
+import {
+  createAdkRouter,
+  ROUTING_MODEL,
+  type ChatRouting,
+  type RouterFleet,
+} from "../src/index.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EVIDENCE_PATH = resolve(HERE, "..", "evidence", "routing-models.json");
@@ -152,11 +157,64 @@ async function main(): Promise<void> {
     );
   }
 
+  /**
+   * Is a second attempt worth the wait — tasks.md 9.5.
+   *
+   * The pinned model places seven of ten, and it misses by producing an empty
+   * turn. An empty turn is not obviously deterministic, so the question is
+   * whether asking again places it, and what that costs the one operator who
+   * is already waiting the longest.
+   *
+   * Measured rather than argued: the same question, repeatedly, retried once
+   * whenever the first attempt comes back `no_call`.
+   */
+  const retryRouter = createAdkRouter({
+    apiKey,
+    model: ROUTING_MODEL,
+    timeoutMs: MEASURE_TIMEOUT_MS,
+  });
+  const retry = {
+    model: ROUTING_MODEL,
+    attempts: 0,
+    placedFirst: 0,
+    retried: 0,
+    placedOnRetry: 0,
+    firstMs: [] as number[],
+    retryMs: [] as number[],
+  };
+
+  const unmatched = REQUESTS[0];
+  if (unmatched) {
+    for (let i = 0; i < 12; i += 1) {
+      const first = await retryRouter.route({ message: unmatched.message, fleet: FLEET });
+      retry.attempts += 1;
+      retry.firstMs.push(first.elapsedMs);
+
+      if (first.kind === "call") {
+        retry.placedFirst += 1;
+      } else if (first.reason === "no_call") {
+        await sleep(SPACING_MS);
+        const second = await retryRouter.route({ message: unmatched.message, fleet: FLEET });
+        retry.retried += 1;
+        retry.retryMs.push(first.elapsedMs + second.elapsedMs);
+        if (second.kind === "call") retry.placedOnRetry += 1;
+      }
+
+      await sleep(SPACING_MS);
+    }
+
+    console.log(
+      `\nretry: ${retry.placedFirst}/${retry.attempts} placed first try, ` +
+        `${retry.placedOnRetry}/${retry.retried} of the misses placed on a second, ` +
+        `costing ${retry.retryMs.join(", ")}ms`,
+    );
+  }
+
   mkdirSync(dirname(EVIDENCE_PATH), { recursive: true });
   writeFileSync(
     EVIDENCE_PATH,
     `${JSON.stringify(
-      { ranAt: new Date().toISOString(), attempts: ATTEMPTS, requests: REQUESTS, rows },
+      { ranAt: new Date().toISOString(), attempts: ATTEMPTS, requests: REQUESTS, rows, retry },
       null,
       2,
     )}\n`,

@@ -109,6 +109,17 @@ Missing credential, timeout, 429, 503, malformed response, unknown tool name, an
 
 No new error surface, because there is no better answer available: the operator asked something the console could not route, which is what that state says. A 5xx here would report the provider's health as the product's, which is the same objection `/health` exists to avoid.
 
+An empty turn gets one more ask, and nothing else does. The pinned model's
+miss is a turn with no call in it, and that turn is not deterministic: two of
+four placed when asked again, taking a twelve-question run from seven
+placements to nine, with the retried requests finishing inside 1.6 seconds in
+total. A provider error does not retry — asking again immediately is what a
+service refusing for quota least needs — and a timeout does not retry, because
+the budget exists to bound the longest wait and doubling it for the slowest
+case is the opposite of what it is for. Both attempts share one budget, so a
+retry can never push a request past what a single call was allowed, and a
+second ask is skipped entirely when what remains is too little to answer in.
+
 The timeout is a hard budget. It was written down here as "below the point where a person watching a demo assumes the page is broken", and the measurement moved it: ten seconds, from a worst observed call of nine. That is longer than the original intent and it is the right trade, for the reason running the matcher first makes available — the nine demo sentences never wait on a provider at all, so the budget is only ever spent on a question that would otherwise have been refused outright.
 
 ## D11 — Agent-supplied text is data, in the user turn

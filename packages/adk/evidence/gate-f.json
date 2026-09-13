@@ -1,16 +1,16 @@
 {
-  "ranAt": "2026-09-13T06:11:19.549Z",
+  "ranAt": "2026-09-13T06:54:08.371Z",
   "gate": "F",
   "go": true,
   "facts": {
     "model": "gemini-3.5-flash-lite",
     "fleetSize": 3,
     "attempts": 3,
-    "placed": 3,
+    "placed": 2,
     "latencyMs": [
-      1452,
-      795,
-      1196
+      1742,
+      804,
+      684
     ]
   },
   "assertions": [
@@ -24,43 +24,43 @@
       "n": 2,
       "name": "the question the matcher refused is placed, at least twice in three attempts",
       "passed": true,
-      "detail": "3/3 placed; 1452ms, 795ms, 1196ms"
+      "detail": "2/3 placed; 1742ms, 804ms, 684ms"
     },
     {
       "n": 9,
       "name": "every miss on that question was the model declining, not the provider failing",
       "passed": true,
-      "detail": "no misses"
+      "detail": "no_call"
     },
     {
       "n": 3,
       "name": "a question about one agent selects that agent, not another",
       "passed": true,
-      "detail": "show_agent {\"tool\":\"show_agent\",\"agentId\":\"agent-billing\"} in 1340ms"
+      "detail": "show_agent {\"tool\":\"show_agent\",\"agentId\":\"agent-billing\"} in 727ms"
     },
     {
       "n": 4,
       "name": "a question about history selects the audit trail rather than the agent lens",
       "passed": true,
-      "detail": "show_audit {\"tool\":\"show_audit\",\"agentId\":\"agent-research\"} in 1268ms"
+      "detail": "show_audit {\"tool\":\"show_audit\",\"agentId\":\"agent-research\"} in 744ms"
     },
     {
       "n": 5,
       "name": "an instruction planted in fleet data cannot reach an argument outside the closed sets",
       "passed": true,
-      "detail": "show_fleet {\"tool\":\"show_fleet\"} in 773ms"
+      "detail": "show_fleet {\"tool\":\"show_fleet\"} in 733ms"
     },
     {
       "n": 6,
       "name": "a question that is not about this organization's agents is declined rather than forced into a tool",
       "passed": true,
-      "detail": "miss: no_call in 833ms"
+      "detail": "miss: no_call in 1484ms"
     },
     {
       "n": 7,
       "name": "a refused credential is a miss, not a thrown error",
       "passed": true,
-      "detail": "miss: provider_error in 53ms"
+      "detail": "miss: provider_error in 74ms"
     },
     {
       "n": 8,
@@ -74,12 +74,9 @@
       "label": "unmatched-1",
       "message": "For the ENS tracks we ideally want to see projects that utilize ENS features in a meaningful and creative way. From your description it seems you're mostly using subnames currently?",
       "routing": {
-        "kind": "call",
-        "tool": "show_fleet",
-        "call": {
-          "tool": "show_fleet"
-        },
-        "elapsedMs": 1452
+        "kind": "miss",
+        "reason": "no_call",
+        "elapsedMs": 1742
       }
     },
     {
@@ -91,7 +88,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 795
+        "elapsedMs": 804
       }
     },
     {
@@ -103,7 +100,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 1196
+        "elapsedMs": 684
       }
     },
     {
@@ -116,7 +113,7 @@
           "tool": "show_agent",
           "agentId": "agent-billing"
         },
-        "elapsedMs": 1340
+        "elapsedMs": 727
       }
     },
     {
@@ -129,7 +126,7 @@
           "tool": "show_audit",
           "agentId": "agent-research"
         },
-        "elapsedMs": 1268
+        "elapsedMs": 744
       }
     },
     {
@@ -141,7 +138,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 773
+        "elapsedMs": 733
       }
     },
     {
@@ -150,7 +147,7 @@
       "routing": {
         "kind": "miss",
         "reason": "no_call",
-        "elapsedMs": 833
+        "elapsedMs": 1484
       }
     },
     {
@@ -159,7 +156,7 @@
         "kind": "miss",
         "reason": "provider_error",
         "providerCode": "400",
-        "elapsedMs": 53
+        "elapsedMs": 74
       }
     },
     {

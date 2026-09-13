@@ -1,6 +1,6 @@
 {
-  "ranAt": "2026-09-13T06:06:19.832Z",
-  "attempts": 5,
+  "ranAt": "2026-09-13T06:49:21.690Z",
+  "attempts": 3,
   "requests": [
     {
       "label": "unmatched",
@@ -16,58 +16,51 @@
   "rows": [
     {
       "model": "gemini-3.5-flash-lite",
-      "correct": 7,
-      "answered": 7,
-      "attempts": 10,
+      "correct": 4,
+      "answered": 4,
+      "attempts": 6,
       "latencyMs": [
-        9030,
-        6055,
-        6738,
-        8209,
-        8481,
-        3735,
-        6174
+        1347,
+        812,
+        814,
+        952
       ],
-      "medianMs": 6738,
+      "medianMs": 952,
       "outcomes": [
-        "unmatched=miss:no_call",
-        "one-agent=show_agent:agent-billing",
-        "unmatched=miss:no_call",
-        "one-agent=show_agent:agent-billing",
         "unmatched=show_fleet",
         "one-agent=show_agent:agent-billing",
-        "unmatched=show_fleet",
+        "unmatched=miss:no_call",
         "one-agent=show_agent:agent-billing",
         "unmatched=miss:no_call",
         "one-agent=show_agent:agent-billing"
       ]
-    },
-    {
-      "model": "gemini-3.6-flash",
-      "correct": 6,
-      "answered": 6,
-      "attempts": 10,
-      "latencyMs": [
-        5568,
-        3255,
-        5963,
-        3406,
-        4426,
-        3209
-      ],
-      "medianMs": 4426,
-      "outcomes": [
-        "unmatched=show_fleet",
-        "one-agent=show_agent:agent-billing",
-        "unmatched=show_fleet",
-        "one-agent=show_agent:agent-billing",
-        "unmatched=show_fleet",
-        "one-agent=show_agent:agent-billing",
-        "unmatched=miss:provider_error(429)",
-        "one-agent=miss:provider_error(429)",
-        "unmatched=miss:provider_error(429)",
-        "one-agent=miss:provider_error(429)"
-      ]
     }
-  ]
+  ],
+  "retry": {
+    "model": "gemini-3.5-flash-lite",
+    "attempts": 12,
+    "placedFirst": 7,
+    "retried": 4,
+    "placedOnRetry": 2,
+    "firstMs": [
+      808,
+      675,
+      730,
+      783,
+      795,
+      1204,
+      714,
+      816,
+      634,
+      909,
+      650,
+      298
+    ],
+    "retryMs": [
+      1598,
+      1638,
+      1367,
+      1303
+    ]
+  }
 }
