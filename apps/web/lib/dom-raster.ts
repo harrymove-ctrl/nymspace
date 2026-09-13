@@ -85,6 +85,15 @@ const SVG_PAINT = [
 const SVG_CACHE_LIMIT = 64;
 
 /**
+ * A ring-shaped `box-shadow`, which is how a focus ring is usually drawn.
+ *
+ * `0 0 0 2px <colour>` — no offset, no blur, all spread. Tailwind's `ring-*`
+ * compiles to exactly this, and it is the only shadow shape worth reading:
+ * a blurred one is a shadow, and this file draws no shadows.
+ */
+const RING = /(rgba?\([^)]*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px/;
+
+/**
  * A colour stop with a position, which is all a dash is made of.
  *
  * `repeating-linear-gradient(colour 0px, colour 2px, transparent 2px,
@@ -408,6 +417,67 @@ export function createDomRaster(
     }
 
     paintRules(style, rect, x, y);
+    paintFocusRing(element, style, rect, x, y, radius);
+  }
+
+  /**
+   * Where the keyboard is.
+   *
+   * Drawn rather than avoided. The first version of the fold uncovered the
+   * whole page whenever anything inside it held focus, so that the browser's
+   * own ring would show — which meant clicking any button switched the effect
+   * off and left it off, because a clicked button keeps focus. The ring is two
+   * strokes; the effect is the feature. Draw the ring.
+   *
+   * `:focus-visible` rather than `:focus`, so this follows the same rule the
+   * browser uses to decide whether to paint a ring at all: a mouse click on a
+   * button does not match it, a Tab onto the same button does.
+   */
+  function paintFocusRing(
+    element: Element,
+    style: CSSStyleDeclaration,
+    rect: DOMRect,
+    x: number,
+    y: number,
+    radius: number,
+  ) {
+    try {
+      if (!element.matches(":focus-visible")) return;
+    } catch {
+      return;
+    }
+
+    const ring = (colour: string, thickness: number, offset: number) => {
+      const inset = -offset - thickness / 2;
+      const w = rect.width - inset * 2;
+      const h = rect.height - inset * 2;
+      if (w <= 0 || h <= 0) return;
+      ctx!.save();
+      ctx!.strokeStyle = colour;
+      ctx!.lineWidth = thickness;
+      ctx!.beginPath();
+      ctx!.roundRect(x + inset, y + inset, w, h, Math.max(radius - inset, 0));
+      ctx!.stroke();
+      ctx!.restore();
+    };
+
+    const outline = parseFloat(style.outlineWidth) || 0;
+    if (
+      outline > 0 &&
+      style.outlineStyle !== "none" &&
+      !TRANSPARENT.test(style.outlineColor)
+    ) {
+      ring(style.outlineColor, outline, parseFloat(style.outlineOffset) || 0);
+      return;
+    }
+
+    const shadow = RING.exec(style.boxShadow);
+    if (!shadow) return;
+    const [, colour, offsetX, offsetY, blur, spread] = shadow;
+    // Anything offset or blurred is a drop shadow, which this does not draw.
+    if (parseFloat(offsetX!) || parseFloat(offsetY!) || parseFloat(blur!)) return;
+    const thickness = parseFloat(spread!);
+    if (thickness > 0 && !TRANSPARENT.test(colour!)) ring(colour!, thickness, 0);
   }
 
   /**
