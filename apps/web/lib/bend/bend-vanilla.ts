@@ -590,7 +590,7 @@ export function createBend(
       htmlInCanvas ||
       (raster !== null &&
         scrollable &&
-        !focusWithin &&
+        !typing &&
         !selectionWithin &&
         (topCurrent > 1e-2 ||
           bottomCurrent > 1e-2 ||
@@ -874,22 +874,35 @@ export function createBend(
   let forwarding = false;
 
   /*
-    Two states the raster cannot draw, and so must not cover.
+    The two things the raster cannot draw, and so must not cover.
 
-    `dom-raster.ts` paints backgrounds, borders and text. It does not paint a
-    focus ring or a selection highlight — nothing a glyph matcher needed, which
-    is what it was written for. Covering the DOM while either is showing would
-    delete the only thing telling a keyboard user where they are, and a bent
-    region stays folded for as long as it is scrolled away from an end, so that
-    would not be a flicker: it would be permanent.
+    `dom-raster.ts` now draws the focus ring, which it did not at first — and
+    the first version of this uncovered the page for any focus at all so the
+    browser's own ring would show. That switched the effect off on the first
+    click and left it off, because a clicked button keeps focus. A ring is two
+    strokes and the fold is the feature, so the ring is drawn and focus no
+    longer uncovers anything.
 
-    The html-in-canvas path draws both and is exempt.
+    What is left is a caret and a selection highlight, which are not a box
+    around an element and are not worth a second rendering engine to draw.
+    Both belong to text you are working with directly, and both are worth more
+    than the fold for as long as you are: typing into a field you cannot see
+    the caret in is not a trade anybody wants.
+
+    The html-in-canvas path draws all of it and is exempt.
   */
-  let focusWithin = false;
+  const TEXT_ENTRY = "input, textarea, [contenteditable]";
+  let typing = false;
   let selectionWithin = false;
 
-  function onFocusIn() {
-    focusWithin = true;
+  function isTextEntry(node: EventTarget | null) {
+    return (
+      node instanceof Element && content.contains(node) && node.matches(TEXT_ENTRY)
+    );
+  }
+
+  function onFocusIn(event: FocusEvent) {
+    typing = isTextEntry(event.target);
     start();
   }
 
@@ -897,8 +910,7 @@ export function createBend(
   // `document.activeElement` here would read `body`, because focusout runs
   // before focus lands.
   function onFocusOut(event: FocusEvent) {
-    const next = event.relatedTarget;
-    focusWithin = next instanceof Node && content.contains(next);
+    typing = isTextEntry(event.relatedTarget);
     start();
   }
 
