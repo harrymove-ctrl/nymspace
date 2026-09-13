@@ -1,0 +1,60 @@
+# Redraws the README's build-log strip from this repo's commit history.
+#
+# Same shape as github.com/terkelg/terkelg's "Regenerate" workflow (on push to
+# main and twice a day), minus the worker: the picture is static, so a branch
+# is enough to host it.
+#
+# The SVGs go to an orphan `readme-assets` branch, force-replaced by a single
+# commit each run, so the bot never lands a commit on main. That keeps the
+# history clean, and it keeps the landing page's build log honest: that log
+# reads the default branch, so it never counts the bot. README.md loads the
+# images from the branch's raw URL.
+#
+# A GitHub API failure fails the job before anything is pushed, so the README
+# keeps the last good picture rather than showing zero commits.
+name: readme-activity
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 0,12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: readme-activity
+  cancel-in-progress: true
+
+jobs:
+  draw:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Version comes from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Draw
+        run: pnpm readme:activity "$RUNNER_TEMP/readme"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to readme-assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --orphan readme-assets
+          cp "$RUNNER_TEMP"/readme/*.svg .
+          git add -- *.svg
+          git commit --quiet -m "chore: redraw readme build log"
+          git push --force origin readme-assets

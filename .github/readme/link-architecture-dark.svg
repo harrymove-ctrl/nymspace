@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 30" width="140" height="30" role="img" aria-label="architecture">
+  <title>architecture</title>
+  <rect x="4.5" y="4.5" width="120" height="21" fill="none" stroke="#484848" stroke-dasharray="3 3"/>
+  <path d="M0.5 4.5H8.5M4.5 0.5V8.5" stroke="#a3a3a3" stroke-width="1.25"/>
+  <path d="M120.5 4.5H128.5M124.5 0.5V8.5" stroke="#a3a3a3" stroke-width="1.25"/>
+  <path d="M0.5 25.5H8.5M4.5 21.5V29.5" stroke="#a3a3a3" stroke-width="1.25"/>
+  <path d="M120.5 25.5H128.5M124.5 21.5V29.5" stroke="#a3a3a3" stroke-width="1.25"/>
+  <text x="64.5" y="19" fill="#fafafa" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, &quot;Liberation Mono&quot;, monospace" font-size="10" letter-spacing="1.4" text-anchor="middle">ARCHITECTURE</text>
+</svg>

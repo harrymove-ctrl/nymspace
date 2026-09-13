@@ -23,12 +23,14 @@
     "check:addresses": "tsx --env-file-if-exists=.env --conditions=react-server scripts/check-addresses.ts",
     "read:privy": "tsx --env-file-if-exists=.env --conditions=react-server scripts/read-privy.ts",
     "bind:wallet": "tsx --env-file-if-exists=.env --conditions=react-server scripts/bind-wallet.ts",
-    "sync:fleet": "tsx --env-file-if-exists=.env --conditions=react-server scripts/sync-fleet.ts"
+    "sync:fleet": "tsx --env-file-if-exists=.env --conditions=react-server scripts/sync-fleet.ts",
+    "readme:activity": "tsx --env-file-if-exists=.env --conditions=react-server scripts/draw-readme-activity.ts"
   },
   "devDependencies": {
     "@nymspace/api": "workspace:*",
     "@nymspace/core": "workspace:*",
     "@nymspace/ens": "workspace:*",
+    "@nymspace/github": "workspace:*",
     "@nymspace/graph": "workspace:*",
     "@nymspace/privy": "workspace:*",
     "@nymspace/store": "workspace:*",

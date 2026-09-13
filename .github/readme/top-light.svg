@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 32" width="880" height="32" role="img" aria-label="Nymspace, ETHOnline 2026, ENSv2 Sepolia and Base Sepolia">
+  <title>Nymspace, ETHOnline 2026, ENSv2 Sepolia and Base Sepolia</title>
+  <text x="0" y="16" fill="#0a0a0a" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, &quot;Liberation Mono&quot;, monospace" font-size="10" letter-spacing="1.5">NYMSPACE  /  ETHONLINE 2026</text>
+  <path d="M232 12H520" stroke="#c8c8c8" stroke-width="1" stroke-dasharray="3 3" fill="none"/>
+  <text x="880" y="16" fill="#737373" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, &quot;Liberation Mono&quot;, monospace" font-size="10" letter-spacing="1.2" text-anchor="end">ENSv2 SEPOLIA 11155111  ·  BASE SEPOLIA 84532</text>
+</svg>

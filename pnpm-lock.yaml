@@ -21,6 +21,9 @@ importers:
       '@nymspace/ens':
         specifier: workspace:*
         version: link:packages/ens
+      '@nymspace/github':
+        specifier: workspace:*
+        version: link:packages/github
       '@nymspace/graph':
         specifier: workspace:*
         version: link:packages/graph

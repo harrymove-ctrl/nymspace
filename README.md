@@ -1,12 +1,54 @@
-<!-- Two files and a <picture> rather than one SVG with a prefers-color-scheme
-     media query: GitHub strips <style> from rendered SVG, so a mark that
-     switches its own fill works in a browser tab and turns invisible here. -->
+<!-- Header layout after github.com/terkelg/terkelg: strips floated left and
+     stacked, each a <picture> choosing a light or a dark SVG. Two files per
+     strip rather than one SVG with a prefers-color-scheme media query: GitHub
+     strips <style> from rendered SVG, so an image that switches its own fill
+     works in a browser tab and turns invisible here. The zero-height data:
+     images are line breaks between floats; <br clear="left"> hands the page
+     back to normal flow. Regenerate with `node .github/readme/generate.mjs`.
+     The build-log strip is the exception: .github/workflows/readme-activity.yml
+     redraws it from the commit history and hosts it on the readme-assets
+     branch, which is why its URLs are absolute. -->
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/brand/wordmark-dark.svg">
-  <img alt="Nymspace" src="apps/web/public/brand/wordmark-light.svg" width="156">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/readme/top-dark.svg">
+  <img alt="Nymspace · ETHOnline 2026 · ENSv2 Sepolia and Base Sepolia" src=".github/readme/top-light.svg" width="100%" align="left">
 </picture>
-
-**One namespace. Many agents. Explicit authority.**
+<img src="data:null;," width="100%" height="0" align="left" alt="">
+<a href="./docs/15_DEMO_SCRIPT.md">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/link-demo-dark.svg">
+    <img alt="Demo script" src=".github/readme/link-demo-light.svg" width="140" height="30" align="left">
+  </picture>
+</a>
+<a href="./docs/04_SYSTEM_ARCHITECTURE.md">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/link-architecture-dark.svg">
+    <img alt="Architecture" src=".github/readme/link-architecture-light.svg" width="140" height="30" align="left">
+  </picture>
+</a>
+<a href="#onchain-evidence">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/link-evidence-dark.svg">
+    <img alt="Onchain evidence" src=".github/readme/link-evidence-light.svg" width="140" height="30" align="left">
+  </picture>
+</a>
+<a href="#run-it-locally">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/link-run-dark.svg">
+    <img alt="Run it locally" src=".github/readme/link-run-light.svg" width="140" height="30" align="left">
+  </picture>
+</a>
+<img src="data:null;," width="100%" height="0" align="left" alt="">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/readme/hero-dark.svg">
+  <img alt="One namespace. Many agents. Explicit authority. nymspace.eth owns research., trader. and deploy.; an agent's own key may write agent-endpoint[mcp] and is reverted on agent-context and agent-registration." src=".github/readme/hero-light.svg" width="100%" align="left">
+</picture>
+<a href="https://github.com/musashi0x/nymspace/commits">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/musashi0x/nymspace/readme-assets/activity-dark.svg">
+    <img alt="Build log: commits to this repository per day, with the latest three. Redrawn twice a day by .github/workflows/readme-activity.yml." src="https://raw.githubusercontent.com/musashi0x/nymspace/readme-assets/activity-light.svg" width="100%" align="left">
+  </picture>
+</a>
+<br clear="left">
 
 Nymspace lets an organization run AI agents under an ENSv2 namespace, delegate
 exactly which identity records each agent may change, verify its ERC 8004
@@ -47,14 +89,26 @@ Script and timings: [`docs/15_DEMO_SCRIPT.md`](./docs/15_DEMO_SCRIPT.md).
 
 ## Sponsor tracks
 
+| Track | How Nymspace uses it |
+|---|---|
+| **ENS** | ENSv2 subnames, record-scoped delegation through a PermissionedResolver, ENSIP 26 records, ENSIP 25 binding verified at runtime |
+| **The Graph** | Live Agent0 ERC 8004 queries, with an LLM ranking whose every citation is checked against the response |
+| **Privy** | One amount policy on a server wallet; an allowed and a denied payment in the same run, limit read from the live policy |
+| **Google ADK** | A tool-calling agent that routes console questions to live reads and writes no part of the answer |
+
 Each proof is a gate that runs against the real systems, not fixtures.
 
-| Track | How Nymspace uses it | Proof |
-|---|---|---|
-| **ENS** | ENSv2 subnames, record-scoped delegation through a PermissionedResolver, ENSIP 26 records, ENSIP 25 binding verified at runtime | Gate A, 10/10 |
-| **The Graph** | Live Agent0 ERC 8004 queries, with an LLM ranking whose every citation is checked against the response | Gate B, 7/7 |
-| **Privy** | One amount policy on a server wallet; an allowed and a denied payment in the same run, limit read from the live policy | Gate C, 10/10 |
-| **Google ADK** | A tool-calling agent that routes console questions to live reads and writes no part of the answer | Gate F, 10/10 · Gate G, 7/7 |
+```
++--------------- [ SPONSOR GATES ] ----------------+
+|                                                  |
+| [x]  ens         gate a  10/10                   |
+| [x]  the graph   gate b   7/7                    |
+| [x]  privy       gate c  10/10                   |
+| [x]  google adk  gate f  10/10                   |
+| [x]  google adk  gate g   7/7                    |
+|                                                  |
++--------------------------------------------------+
+```
 
 Full requirement mapping: [`docs/16_SPONSOR_QUALIFICATION.md`](./docs/16_SPONSOR_QUALIFICATION.md).
 
@@ -141,11 +195,45 @@ pnpm provision:wallet                      # Privy wallet under one amount polic
 pnpm verify:acceptance                     # Gates A-D, three consecutive clean runs
 ```
 
+## Repository layout
+
+Two apps share one set of packages. Domain logic lives in `packages/*` and is
+never reimplemented in an app, so a change in the ENSv2 beta has one blast
+radius.
+
+```
++----------------- [ WORKSPACE ] ------------------+
+|                                                  |
+| nymspace                                         |
+| ├─ apps                                          |
+| │  ├─ web       next.js console     :3111        |
+| │  └─ api       hono, /v1 routes    :3112        |
+| └─ packages                                      |
+|    ├─ core      types, public env                |
+|    ├─ ens       ensv2 reads, writes              |
+|    ├─ graph     agent0 subgraph                  |
+|    ├─ privy     wallet, policy                   |
+|    ├─ adk       console chat router              |
+|    ├─ github    build log feed                   |
+|    └─ store     postgres coordination            |
+|                                                  |
++--------------------------------------------------+
+```
+
+`@nymspace/store` holds labels, provisioning progress and cached snapshots. It
+is not an authority: identity, permissions, trust and spend policy are read
+from their own systems on every request
+([`docs/09_DATA_AND_EVENT_MODEL.md`](./docs/09_DATA_AND_EVENT_MODEL.md)).
+
 ## How it was built
 
 Spec-driven: every feature started as a spec in [`docs/`](./docs) and a change
 proposal in [`openspec/`](./openspec) before any code. AI coding assistants
 were used during development.
+
+The build log at the top of this page is drawn from this repository's own
+commit history by [`scripts/draw-readme-activity.ts`](./scripts/draw-readme-activity.ts),
+from the same read as the landing page's, and redrawn twice a day.
 
 ## License
 
