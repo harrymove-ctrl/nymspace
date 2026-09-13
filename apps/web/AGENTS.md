@@ -56,6 +56,13 @@ The exception is `Frame` and its parts by name. It does not generalise. Any
 other component reaching for a raw `<div>` or `<span>` for layout is drift, and
 the rule above applies to it unchanged.
 
+`components/console/decrypt-gate.tsx` is not a second exception and does not
+need one. It contains raw `<canvas>` elements because a canvas is the surface
+an effect paints on, the way an `<img>` is an image and Astryx wraps neither —
+the rule above is about `<div>` and `<span>` standing in for layout, which that
+file does not do. Its own layout, including the positioned overlay, is
+`VStack`.
+
 Two things `Frame` does **not** get an exception from, because they are the
 reason the rule exists:
 
