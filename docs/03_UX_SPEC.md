@@ -324,6 +324,23 @@ Use:
 
 `Sepolia RPC unavailable`
 
+### Console API unreachable
+
+The console reads every screen from `apps/api`. When that request does not
+complete at all — the process is down, or the network in front of it is — the
+failure is neither a chain fault nor a policy decision, and must not borrow
+either one's words. Reporting it as `Sepolia RPC unavailable` sends an operator
+to a block explorer to debug a process, and in production implies the network is
+down when the network is fine.
+
+Use:
+
+`The console API did not answer`
+
+Say what did not happen: nothing was read and nothing was written. This is a
+failed read — console screens are server-rendered on load — so it can never
+have left a partial write behind.
+
 ### Indexing delay
 
 Use:

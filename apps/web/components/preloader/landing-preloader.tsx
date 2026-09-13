@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { lockScroll } from "@/lib/scroll-lock";
 import { LoudBurst } from "./engine";
 import {
   FONT_CSS,
@@ -182,9 +183,7 @@ export function LandingPreloader() {
 
     // The overlay covers the viewport; a scroll underneath it would land the
     // reader somewhere they did not choose.
-    const root = document.documentElement;
-    const prevOverflow = root.style.overflow;
-    root.style.overflow = "hidden";
+    const unlockScroll = lockScroll();
 
     return () => {
       cancelAnimationFrame(raf);
@@ -192,7 +191,7 @@ export function LandingPreloader() {
       window.removeEventListener("pointerdown", skip);
       window.removeEventListener("keydown", skip);
       window.removeEventListener("wheel", skip);
-      root.style.overflow = prevOverflow;
+      unlockScroll();
       ro?.disconnect();
       engine?.destroy();
     };

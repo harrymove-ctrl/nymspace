@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { CommitActivity } from "@/components/commit-activity";
 import { LandingPreloader } from "@/components/preloader/landing-preloader";
+import { ConsoleLink } from "@/components/reality-split/console-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SoundToggle } from "@/components/ui/sound";
 import { RepoStats } from "@/components/repo-stats";
@@ -45,12 +45,12 @@ export default async function Home() {
           nymspace
         </p>
         <div className="flex items-center gap-4">
-          <Link
+          <ConsoleLink
             href="/console"
             className="text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
           >
             Console
-          </Link>
+          </ConsoleLink>
           <SoundToggle />
           <ThemeToggle />
         </div>
