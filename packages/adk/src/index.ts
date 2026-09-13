@@ -15,7 +15,9 @@ export { createAdkRouter, type AdkRouterConfig, type ChatRouter, type ChatRoutin
 export { ROUTING_MODEL, ROUTING_TIMEOUT_MS } from "./model";
 export {
   RECORD_KEY_NAMES,
+  ROUTABLE_FLEET_LIMIT,
   chatToolDeclarations,
+  routableAgents,
   validateToolCall,
   type ChatToolCall,
   type ChatToolName,

@@ -37,6 +37,38 @@ import type { Schema } from "@google/genai";
 export const RECORD_KEY_NAMES = ["mcp", "a2a", "agent-context"] as const;
 export type RecordKeyName = (typeof RECORD_KEY_NAMES)[number];
 
+/**
+ * How many agents the model may be asked to choose between.
+ *
+ * `store.listAgents` has no `LIMIT`, and every agent it returns appears twice
+ * in a request: once in the schema `enum` of each agent-scoped tool, and once
+ * in the fleet JSON of the user turn. Left unbounded, an organization with a
+ * few hundred agents sends six copies of a few hundred strings on a call
+ * already budgeted at ten seconds against a provider whose measured latency
+ * reaches nine — so the routing stage would get slower exactly as the fleet
+ * got large enough to need it.
+ *
+ * Fifty is a window, not a wall. The matcher reads the whole store and is
+ * unaffected, so an agent outside the window is still reachable by typing its
+ * name — which is what the operator does anyway once a fleet is that size.
+ * The window is the first fifty in the order the store returned, which is by
+ * slug, so it is the same window on every request rather than whatever the
+ * database felt like returning first.
+ */
+export const ROUTABLE_FLEET_LIMIT = 50;
+
+/**
+ * The agents one request may route to.
+ *
+ * One function, because the schema and the prompt have to agree. If the enum
+ * held fifty and the user turn listed three hundred, the model would name an
+ * agent it was shown and the validator would reject it — a miss that looks
+ * like the model misbehaving and is the caller disagreeing with itself.
+ */
+export function routableAgents(fleet: RouterFleet): FleetAgent[] {
+  return fleet.agents.slice(0, ROUTABLE_FLEET_LIMIT);
+}
+
 /** One agent, as the routing stage is allowed to see it. */
 export interface FleetAgent {
   id: string;
@@ -118,7 +150,7 @@ export function chatToolDeclarations(fleet: RouterFleet): {
   description: string;
   parameters: Schema;
 }[] {
-  const ids = fleet.agents.map((agent) => agent.id);
+  const ids = routableAgents(fleet).map((agent) => agent.id);
 
   const agentParam: Schema = {
     type: "STRING",
@@ -272,10 +304,22 @@ export function validateToolCall(
   args: Record<string, unknown>,
   fleet: RouterFleet,
 ): ToolCallResult {
+  /**
+   * Checked against the window the model was shown, not against the whole
+   * fleet.
+   *
+   * The two differ once an organization passes {@link ROUTABLE_FLEET_LIMIT},
+   * and validating against the wider set would accept an id the schema never
+   * offered — a value that could only have come from somewhere other than the
+   * enum. `routableAgents` is the one definition of what this request may
+   * select, and the schema, the prompt and this check all read it.
+   */
+  const routable = routableAgents(fleet);
+
   const agentId = (): string | undefined => {
     const value = args.agentId;
     if (typeof value !== "string") return undefined;
-    return fleet.agents.some((agent) => agent.id === value) ? value : undefined;
+    return routable.some((agent) => agent.id === value) ? value : undefined;
   };
 
   const recordKey = (): RecordKeyName | undefined => {

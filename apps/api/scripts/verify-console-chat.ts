@@ -143,7 +143,24 @@ async function main(): Promise<void> {
    */
   let providerRetries = 0;
 
-  const ask = async (label: string, message: string) => {
+  const ask = async (
+    label: string,
+    message: string,
+    /**
+     * What this question is for, which is the only way the gate can tell a
+     * slow provider from a model doing its job.
+     *
+     * The response body is `unanswered` either way — the route deliberately
+     * renders an outage and a decline the same, which is right for an
+     * operator and useless for a retry rule. The first version of this helper
+     * retried every `unanswered`, so the off-topic question the model is
+     * *supposed* to decline was asked three times and counted two provider
+     * retries, and `providerRetries` measured the model's correct behaviour
+     * rather than the provider's weather. Gate F keeps the two apart by
+     * reading the miss reason; here the gate knows what it expected.
+     */
+    expect: "placed" | "declined" = "placed",
+  ) => {
     for (let attempt = 0; ; attempt += 1) {
       await spacing();
       const response = await app.fetch(
@@ -158,7 +175,10 @@ async function main(): Promise<void> {
       runs.push({ label, message, status, body });
 
       const slow =
-        body["kind"] === "unanswered" && body["routedBy"] === "matcher" && attempt < 2;
+        expect === "placed" &&
+        body["kind"] === "unanswered" &&
+        body["routedBy"] === "matcher" &&
+        attempt < 2;
       if (!slow) return { status, body };
       providerRetries += 1;
     }
@@ -224,7 +244,11 @@ async function main(): Promise<void> {
     `${String(pay.body["kind"])} — ${steps.map((step) => step.path).join(", ") || String(pay.body["message"] ?? "")}`,
   );
 
-  const offTopic = await ask("off-topic", "what is the weather in Hanoi tomorrow");
+  const offTopic = await ask(
+    "off-topic",
+    "what is the weather in Hanoi tomorrow",
+    "declined",
+  );
   assert(
     6,
     "a question this console cannot answer returns the unanswered state with a 200",

@@ -232,11 +232,36 @@ async function routeWithModel(
 
   const answer = await dispatch(routing.call, deps);
 
+  /**
+   * One "chat answered" per request, and it is logged by whoever actually
+   * answered.
+   *
+   * This used to log the line unconditionally, including when `dispatch`
+   * returned nothing — and the handler then logged a second one, so a single
+   * request id carried `stage=model answer=none` and `stage=none
+   * answer=unanswered`, disagreeing with itself about which stage answered.
+   * A log nobody can count is the failure `apps/api/src/log.ts` exists to
+   * avoid.
+   *
+   * A selection that dispatched to nothing is an unrouted request, not an
+   * answered one: the model placed the question and the row it named was gone
+   * by the time the read ran.
+   */
+  if (!answer) {
+    log.info("chat unrouted", {
+      stage: "model",
+      miss: "dispatch_empty",
+      tool: routing.tool,
+      modelMs: routing.elapsedMs,
+    });
+    return undefined;
+  }
+
   log.info("chat answered", {
     stage: "model",
     tool: routing.tool,
     modelMs: routing.elapsedMs,
-    answer: answer?.kind ?? "none",
+    answer: answer.kind,
   });
 
   return answer;

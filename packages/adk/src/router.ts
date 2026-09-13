@@ -1,12 +1,13 @@
 import "server-only";
 
 import { FunctionTool, Gemini, InMemoryRunner, LlmAgent, getFunctionCalls } from "@google/adk";
-import type { BaseLlm } from "@google/adk";
+import type { BaseLlm, Event } from "@google/adk";
 import type { Content } from "@google/genai";
 
 import { ROUTING_MODEL, ROUTING_TIMEOUT_MS } from "./model";
 import {
   chatToolDeclarations,
+  routableAgents,
   validateToolCall,
   type ChatToolCall,
   type ChatToolName,
@@ -182,10 +183,31 @@ export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
     fleet: RouterFleet,
     budgetMs: number,
   ): Promise<ChatRouting> {
-    {
-      const started = Date.now();
-      const elapsed = () => Date.now() - started;
-      const timeoutMs = budgetMs;
+    const started = Date.now();
+    const elapsed = () => Date.now() - started;
+
+    /**
+     * Declared out here, used in the `finally`, and assigned inside the `try`.
+     *
+     * The setup below — the tool schemas, the agent, the runner, the session,
+     * the call that opens the stream — used to sit above the `try`, which made
+     * this function's one guarantee conditional: a throw from any of it walked
+     * straight out through `route`, out through `routeWithModel`, and became a
+     * 500 on a route whose contract is that a provider failure is a 200 and an
+     * unanswered state. It also leaked the timer, because nothing cleared it.
+     *
+     * Nothing here is expected to throw today. That is exactly why it has to
+     * be inside: the guarantee should not depend on ADK's constructors staying
+     * infallible across a version bump.
+     */
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let events: AsyncGenerator<Event, void, undefined> | undefined;
+    const controller = new AbortController();
+
+    try {
+      const expiry = new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), budgetMs);
+      });
 
       /**
        * Tools are rebuilt per request, because the agent enumeration is the
@@ -212,23 +234,10 @@ export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
 
       const runner = new InMemoryRunner({ agent, appName: APP_NAME });
 
-      /**
-       * One turn, no session, no history — design D6.
-       *
-       * `runEphemeral` is the API's own name for that. Conversation history is
-       * where an instruction injected through a record value read three
-       * answers ago survives to influence the next selection, and it is what
-       * would stop each answer being reproducible from its own message alone.
-       */
       const content: Content = {
         role: "user",
         parts: [{ text: userTurn(message, fleet) }],
       };
-
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const expiry = new Promise<"timeout">((resolve) => {
-        timer = setTimeout(() => resolve("timeout"), timeoutMs);
-      });
 
       /**
        * A fresh session per request, and `runAsync` rather than `runEphemeral`.
@@ -243,115 +252,114 @@ export function createAdkRouter(config: AdkRouterConfig): ChatRouter {
        * The session service is in-memory, so this is an object and a map
        * insert, not I/O.
        */
-      const controller = new AbortController();
       const session = await runner.sessionService.createSession({
         appName: APP_NAME,
         userId: USER_ID,
       });
 
-      const events = runner.runAsync({
+      events = runner.runAsync({
         userId: USER_ID,
         sessionId: session.id,
         newMessage: content,
         abortSignal: controller.signal,
       });
 
-      try {
-        while (true) {
-          const step = await Promise.race([events.next(), expiry]);
+      while (true) {
+        const step = await Promise.race([events.next(), expiry]);
 
-          if (step === "timeout") return { kind: "miss", reason: "timeout", elapsedMs: elapsed() };
-          if (step.done) return { kind: "miss", reason: "no_call", elapsedMs: elapsed() };
+        if (step === "timeout") return { kind: "miss", reason: "timeout", elapsedMs: elapsed() };
+        if (step.done) return { kind: "miss", reason: "no_call", elapsedMs: elapsed() };
 
-          /**
-           * A provider failure arrives as an event, not as a thrown error.
-           *
-           * ADK catches the failed call and yields an `Event` carrying
-           * `errorCode` — `UNKNOWN_ERROR` with `errorMessage: "fetch failed"`
-           * for an unreachable endpoint, `404` for a model this key cannot
-           * see, the provider's own code for a refused one. Without this
-           * branch the generator simply ends, and an outage reports as
-           * `no_call`: the console would say the *model* declined to place the
-           * question, when the model was never reached.
-           *
-           * Gate F assertion 7 exists because the first version of this file
-           * did exactly that, and every failing run looked like a model that
-           * had nothing to say.
-           */
-          if (step.value.errorCode) {
-            return {
-              kind: "miss",
-              /**
-               * `STOP` is the exception, and it is the common one.
-               *
-               * It is a finish reason, not a failure: the turn ended normally
-               * and the model chose to call nothing. ADK flags it because the
-               * event carries no content, but the fact it reports is exactly
-               * what {@link RouterMiss}'s `no_call` means — and the measurement
-               * run in `evidence/routing-models.json` shows it happening on
-               * every model tested, so treating it as an outage would have put
-               * a provider error in the log for the ordinary case of a
-               * question the model could not place either.
-               */
-              reason: step.value.errorCode === "STOP" ? "no_call" : "provider_error",
-              ...(step.value.errorCode !== "STOP" && { providerCode: step.value.errorCode }),
-              elapsedMs: elapsed(),
-            };
-          }
-
-          const [first] = getFunctionCalls(step.value);
-          if (!first?.name) continue;
-
-          /**
-           * The first call decides, and the rest of the turn is abandoned.
-           *
-           * A model may emit several calls at once. Taking the first and
-           * stopping is the only option that keeps an answer to one subject:
-           * the console renders one lens, so a second selection could only be
-           * discarded silently or rendered as something the operator did not
-           * ask about.
-           */
-          const checked = validateToolCall(first.name, first.args ?? {}, fleet);
-          return checked.ok
-            ? {
-                kind: "call",
-                tool: checked.call.tool,
-                call: checked.call,
-                elapsedMs: elapsed(),
-              }
-            : { kind: "miss", reason: checked.rejection, elapsedMs: elapsed() };
+        /**
+         * A provider failure arrives as an event, not as a thrown error.
+         *
+         * ADK catches the failed call and yields an `Event` carrying
+         * `errorCode` — `UNKNOWN_ERROR` with `errorMessage: "fetch failed"`
+         * for an unreachable endpoint, `404` for a model this key cannot
+         * see, the provider's own code for a refused one. Without this
+         * branch the generator simply ends, and an outage reports as
+         * `no_call`: the console would say the *model* declined to place the
+         * question, when the model was never reached.
+         *
+         * Gate F assertion 7 exists because the first version of this file
+         * did exactly that, and every failing run looked like a model that
+         * had nothing to say.
+         */
+        if (step.value.errorCode) {
+          return {
+            kind: "miss",
+            /**
+             * `STOP` is the exception, and it is the common one.
+             *
+             * It is a finish reason, not a failure: the turn ended normally
+             * and the model chose to call nothing. ADK flags it because the
+             * event carries no content, but the fact it reports is exactly
+             * what {@link RouterMiss}'s `no_call` means — and the measurement
+             * run in `evidence/routing-models.json` shows it happening on
+             * every model tested, so treating it as an outage would have put
+             * a provider error in the log for the ordinary case of a
+             * question the model could not place either.
+             */
+            reason: step.value.errorCode === "STOP" ? "no_call" : "provider_error",
+            ...(step.value.errorCode !== "STOP" && { providerCode: step.value.errorCode }),
+            elapsedMs: elapsed(),
+          };
         }
-      } catch {
-        /**
-         * Unreachable, refused, out of quota, malformed — one miss.
-         *
-         * The provider's error is deliberately not carried out of this
-         * function. It would end up in a response body or a log line, and it
-         * can contain the request that produced it. The caller needs to know
-         * that routing failed, which is what this says.
-         */
-        return { kind: "miss", reason: "provider_error", elapsedMs: elapsed() };
-      } finally {
-        if (timer) clearTimeout(timer);
+
+        const [first] = getFunctionCalls(step.value);
+        if (!first?.name) continue;
 
         /**
-         * Abort, then walk away without waiting.
+         * The first call decides, and the rest of the turn is abandoned.
          *
-         * `await events.return()` looks like the tidy way to close a generator
-         * and it defeats the entire budget: `return()` resolves only when the
-         * generator reaches a yield point, so a model still inside a slow
-         * request holds this `finally` open for as long as it takes. The
-         * timeout then measures nothing — the route waits exactly as long as
-         * it would have with no budget at all, which `router.test.ts` caught
-         * by scripting a model that sleeps for a minute.
-         *
-         * The signal is what actually stops the work. Not awaiting the close
-         * is what guarantees the caller gets an answer inside the budget even
-         * when the model ignores it.
+         * A model may emit several calls at once. Taking the first and
+         * stopping is the only option that keeps an answer to one subject:
+         * the console renders one lens, so a second selection could only be
+         * discarded silently or rendered as something the operator did not
+         * ask about.
          */
-        controller.abort();
-        void events.return?.(undefined)?.catch(() => undefined);
+        const checked = validateToolCall(first.name, first.args ?? {}, fleet);
+        return checked.ok
+          ? {
+              kind: "call",
+              tool: checked.call.tool,
+              call: checked.call,
+              elapsedMs: elapsed(),
+            }
+          : { kind: "miss", reason: checked.rejection, elapsedMs: elapsed() };
       }
+    } catch {
+      /**
+       * Unreachable, refused, out of quota, malformed, or a constructor that
+       * changed its mind — one miss.
+       *
+       * The provider's error is deliberately not carried out of this
+       * function. It would end up in a response body or a log line, and it
+       * can contain the request that produced it. The caller needs to know
+       * that routing failed, which is what this says.
+       */
+      return { kind: "miss", reason: "provider_error", elapsedMs: elapsed() };
+    } finally {
+      if (timer) clearTimeout(timer);
+
+      /**
+       * Abort, then walk away without waiting.
+       *
+       * `await events.return()` looks like the tidy way to close a generator
+       * and it defeats the entire budget: `return()` resolves only when the
+       * generator reaches a yield point, so a model still inside a slow
+       * request holds this `finally` open for as long as it takes. The
+       * timeout then measures nothing — the route waits exactly as long as
+       * it would have with no budget at all, which `router.test.ts` caught
+       * by scripting a model that sleeps for a minute.
+       *
+       * The signal is what actually stops the work. Not awaiting the close
+       * is what guarantees the caller gets an answer inside the budget even
+       * when the model ignores it. `events` is optional because the throw
+       * this `try` now covers can happen before it is assigned.
+       */
+      controller.abort();
+      void events?.return?.(undefined)?.catch(() => undefined);
     }
   }
 
@@ -409,7 +417,9 @@ const MIN_RETRY_MS = 2_000;
  * makes the intent legible to anyone reading a captured prompt.
  */
 function userTurn(message: string, fleet: RouterFleet): string {
-  const agents = fleet.agents.map((agent) => ({
+  // The same window the schema enum uses. See `ROUTABLE_FLEET_LIMIT`: a prompt
+  // listing agents the enum does not hold invites a name the validator refuses.
+  const agents = routableAgents(fleet).map((agent) => ({
     id: agent.id,
     slug: agent.slug,
     ensName: agent.ensName,

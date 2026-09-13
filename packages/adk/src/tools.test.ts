@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   RECORD_KEY_NAMES,
+  ROUTABLE_FLEET_LIMIT,
   chatToolDeclarations,
+  routableAgents,
   validateToolCall,
   type RouterFleet,
 } from "./tools";
@@ -175,5 +177,39 @@ describe("validation", () => {
       ok: true,
       call: { tool: "plan_grant", agentId: "agent-evil", recordKey: "mcp" },
     });
+  });
+});
+
+describe("the routable window", () => {
+  const many: RouterFleet = {
+    parentName: "nymspace.eth",
+    agents: Array.from({ length: ROUTABLE_FLEET_LIMIT + 10 }, (_, i) => ({
+      id: `agent-${String(i).padStart(3, "0")}`,
+      slug: `a${i}`,
+      ensName: `a${i}.nymspace.eth`,
+    })),
+  };
+
+  it("bounds what the model is asked to choose between", () => {
+    const show = chatToolDeclarations(many).find((d) => d.name === "show_agent");
+    expect(show?.parameters.properties?.["agentId"]?.enum).toHaveLength(ROUTABLE_FLEET_LIMIT);
+  });
+
+  it("refuses an agent outside the window it was shown", () => {
+    // Still reachable by name: the matcher reads the whole store. What must not
+    // happen is the model naming an agent it was never offered.
+    const outside = many.agents[ROUTABLE_FLEET_LIMIT];
+    expect(validateToolCall("show_agent", { agentId: outside?.id }, many)).toEqual({
+      ok: false,
+      rejection: "unknown_agent",
+    });
+  });
+
+  it("offers the window in a stable order", () => {
+    // Same window on every request, so a routed answer is reproducible from
+    // its own message rather than from whatever the database returned first.
+    expect(routableAgents(many).map((a) => a.id)).toEqual(
+      many.agents.slice(0, ROUTABLE_FLEET_LIMIT).map((a) => a.id),
+    );
   });
 });

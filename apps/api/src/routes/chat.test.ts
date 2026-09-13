@@ -351,3 +351,61 @@ describe("the routing stage", () => {
     expect(answer.routedBy).toBe("matcher");
   });
 });
+
+describe("the log", () => {
+  /**
+   * One "chat answered" per request.
+   *
+   * A selection that dispatched to nothing used to log the line and then let
+   * the handler log it again, so a single request id carried two answers and
+   * disagreed with itself about which stage produced one. A log nobody can
+   * count is the failure `log.ts` exists to avoid.
+   */
+  it("records a request once, even when the selection dispatched to nothing", async () => {
+    const lines: string[] = [];
+    const app = createApp(
+      { port: 0, allowedOrigins: [] },
+      {
+        chatRouter: fakeRouter({
+          kind: "call",
+          tool: "plan_connect",
+          // In the fleet the router was handed, gone from the store by the
+          // time the read runs.
+          call: { tool: "plan_connect", agentId: "agent-ghost" },
+          elapsedMs: 9,
+        }),
+        store: {
+          listAgents: async () => [agent],
+          getAgent: async (id: string) => (id === agent.id ? agent : undefined),
+          listActivity: async () => [],
+          getFinancialAuthority: async () => AUTHORITY,
+        },
+        ens: recordingEns([]),
+        config: { chainId: 11155111 },
+        registry: ADDRESS,
+        organization: ADDRESS,
+        controller: agent.controllerAddress,
+        parentName: "nymspace.eth",
+      } as unknown as Deps,
+      (line) => lines.push(line),
+    );
+
+    const res = await app.fetch(
+      new Request("http://api.test/v1/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "tell me about the one that is gone" }),
+      }),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.kind).toBe("unanswered");
+
+    const answered = lines.filter((line) => line.includes('"chat answered"'));
+    expect(answered).toHaveLength(1);
+    expect(answered[0]).toContain('"stage":"none"');
+    // The model's part is still recorded, as an unrouted request.
+    expect(lines.filter((line) => line.includes('"chat unrouted"'))).toHaveLength(1);
+  });
+});

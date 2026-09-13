@@ -507,8 +507,20 @@ function ReadTurn({
   if (turn.answer.kind === "unanswered") {
     return (
       <ChatMessage sender="assistant">
-        <ChatMessageBubble variant="ghost" width="100%">
+          <ChatMessageBubble variant="ghost" width="100%">
           <VStack gap={3} width="100%" className="min-w-0">
+            {/*
+              An unanswered answer can be model-routed too, which is not
+              obvious and is the reason this is here.
+
+              A payment question the matcher does not recognise is placed by
+              the model, and `paymentPlan` then answers `unanswered` when that
+              agent has no wallet or no policy — so a model chose which agent
+              the message is about and the operator would otherwise never be
+              told. The lens and plan branches disclose; this one was missed
+              until a review went looking for the case.
+            */}
+            <Routing stage={turn.answer.routedBy} />
             <VStack maxWidth="42rem">
               <Text type="body" as="p">
                 {turn.answer.message}

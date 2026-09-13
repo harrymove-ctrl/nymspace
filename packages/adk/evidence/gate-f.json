@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-09-13T07:52:15.828Z",
+  "ranAt": "2026-09-13T08:15:16.112Z",
   "gate": "F",
   "go": true,
   "facts": {
@@ -8,9 +8,9 @@
     "attempts": 3,
     "placed": 3,
     "latencyMs": [
-      1150,
-      740,
-      774
+      1197,
+      872,
+      808
     ],
     "providerRetries": 0
   },
@@ -25,7 +25,7 @@
       "n": 2,
       "name": "the question the matcher refused is placed, at least twice in three attempts",
       "passed": true,
-      "detail": "3/3 placed; 1150ms, 740ms, 774ms"
+      "detail": "3/3 placed; 1197ms, 872ms, 808ms"
     },
     {
       "n": 9,
@@ -37,31 +37,31 @@
       "n": 3,
       "name": "a question about one agent selects that agent, not another",
       "passed": true,
-      "detail": "show_agent {\"tool\":\"show_agent\",\"agentId\":\"agent-billing\"} in 885ms"
+      "detail": "show_agent {\"tool\":\"show_agent\",\"agentId\":\"agent-billing\"} in 1278ms"
     },
     {
       "n": 4,
       "name": "a question about history selects the audit trail rather than the agent lens",
       "passed": true,
-      "detail": "show_audit {\"tool\":\"show_audit\",\"agentId\":\"agent-research\"} in 1104ms"
+      "detail": "show_audit {\"tool\":\"show_audit\",\"agentId\":\"agent-research\"} in 698ms"
     },
     {
       "n": 5,
       "name": "an instruction planted in fleet data cannot reach an argument outside the closed sets",
       "passed": true,
-      "detail": "show_fleet {\"tool\":\"show_fleet\"} in 904ms"
+      "detail": "show_fleet {\"tool\":\"show_fleet\"} in 691ms"
     },
     {
       "n": 6,
       "name": "a question that is not about this organization's agents is declined rather than forced into a tool",
       "passed": true,
-      "detail": "miss: no_call in 2438ms"
+      "detail": "miss: no_call in 1774ms"
     },
     {
       "n": 7,
       "name": "a refused credential is a miss, not a thrown error",
       "passed": true,
-      "detail": "miss: provider_error in 97ms"
+      "detail": "miss: provider_error in 80ms"
     },
     {
       "n": 8,
@@ -86,7 +86,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 1150
+        "elapsedMs": 1197
       }
     },
     {
@@ -98,7 +98,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 740
+        "elapsedMs": 872
       }
     },
     {
@@ -110,7 +110,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 774
+        "elapsedMs": 808
       }
     },
     {
@@ -123,7 +123,7 @@
           "tool": "show_agent",
           "agentId": "agent-billing"
         },
-        "elapsedMs": 885
+        "elapsedMs": 1278
       }
     },
     {
@@ -136,7 +136,7 @@
           "tool": "show_audit",
           "agentId": "agent-research"
         },
-        "elapsedMs": 1104
+        "elapsedMs": 698
       }
     },
     {
@@ -148,7 +148,7 @@
         "call": {
           "tool": "show_fleet"
         },
-        "elapsedMs": 904
+        "elapsedMs": 691
       }
     },
     {
@@ -157,7 +157,7 @@
       "routing": {
         "kind": "miss",
         "reason": "no_call",
-        "elapsedMs": 2438
+        "elapsedMs": 1774
       }
     },
     {
@@ -166,7 +166,7 @@
         "kind": "miss",
         "reason": "provider_error",
         "providerCode": "400",
-        "elapsedMs": 97
+        "elapsedMs": 80
       }
     },
     {

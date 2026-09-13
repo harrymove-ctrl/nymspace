@@ -236,3 +236,40 @@ would have passed while proving nothing.
   answer about things I can go and check", a string in `chat.ts`. A heuristic
   that cannot tell the application's voice from a model's was not measuring
   what it was named after. 13.7 replaced it
+
+## 14. What the review found, after this landed
+
+Five findings, all of them in this change rather than upstream, all fixed.
+
+- [x] 14.1 Every construction step in `attempt()` — the tool schemas, the
+  agent, the runner, the session, the call that opens the stream — sat above
+  the `try`, so a throw from any of it walked out through `route`, out through
+  `routeWithModel`, and became a 500 on a route whose whole contract is that a
+  provider failure is a 200 and an unanswered state. It leaked the budget's
+  timer too, because nothing cleared it. Nothing there is expected to throw
+  today, which is the reason it had to move inside: the guarantee should not
+  depend on ADK's constructors staying infallible across a version bump
+- [x] 14.2 The console's `unanswered` branch rendered no routing disclosure,
+  and the merge with `origin/main` made that reachable: `paymentPlan` now
+  answers `unanswered` when an agent has no wallet, so a model could choose
+  which agent a message was about and the operator would never be told. Both
+  sides were right on their own; the gap opened between them
+- [x] 14.3 A selection that dispatched to nothing logged `chat answered` and
+  then let the handler log it again, so one request id carried
+  `stage=model answer=none` and `stage=none answer=unanswered` and disagreed
+  with itself about which stage answered. It is an unrouted request, not an
+  answered one, and `chat.test.ts` now pins one `chat answered` per request
+- [x] 14.4 Gate G retried every `unanswered` response, but a decline produces
+  one too — so the off-topic question the model is *supposed* to refuse was
+  asked three times and counted two provider retries. `providerRetries` was
+  measuring the model's correct behaviour. The gate now says what it expects of
+  each question and retries only a question it expected to be placed: the run
+  went from 11 questions and 4 retries to 7 and 0
+- [x] 14.5 `store.listAgents` has no `LIMIT`, and every agent appeared twice in
+  a request — in the schema `enum` of each agent-scoped tool and in the fleet
+  JSON of the user turn. `ROUTABLE_FLEET_LIMIT` bounds it at fifty, and the
+  schema, the prompt and the validator all read the same `routableAgents`
+  window. Writing the test for it exposed a second bug immediately: the
+  validator was still checking the whole fleet, so it would have accepted an id
+  the schema never offered. The matcher reads the whole store and is
+  unaffected, so an agent outside the window is still reachable by name
